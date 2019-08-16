@@ -15,7 +15,7 @@ def get_polls():
 
 __token__ = get_tg_token()
 __polls__ = get_polls()
-__count__ = 0
+count = 0
 
 bot = telebot.TeleBot(__token__)
 
@@ -36,10 +36,12 @@ def send_welcome(message):
 @bot.callback_query_handler(func=lambda call: call.data in __polls__)
 def receive_poll(call):
     print(call)
-    bot.edit_message_text("thanks {}".format(__count__),
+    global count
+    count = count + 1
+    bot.edit_message_text("thanks {}".format(count),
                           message_id=call.message.message_id,
                           chat_id=call.message.chat.id,
                           reply_markup=create_poll_markup())
 
 
-bot.polling()
+bot.polling(none_stop=True)
