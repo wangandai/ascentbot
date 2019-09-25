@@ -41,24 +41,23 @@ bot = telebot.AsyncTeleBot(__token__)
 
 
 def render_expedition(expedition):
-    msg = "\n"
-    msg += "*{}* {} ({} 👥)\n".format(expedition.title,
+    msg = "🌋 {}    🕑 {}    👥 {}\n".format(expedition.title,
                                       datetime.time.strftime(expedition.time, "%H%M"),
                                       len(expedition.members))
     for i, member in enumerate(expedition.members):
         msg += "{}. [{}](tg://user?id={}) {}\n".format(i + 1, member.tg_handle, member.tg_id,
                                                        member.label if member.label is not None else "")
-    return msg
+    return msg + "\n"
 
 
 def render_expeditions(guild):
-    msg = "Expeditions: \n"
+    msg = ""
     expeds = list(guild.expeditions.values())
     expeds.sort(key=lambda x: x.time)
     for e in expeds:
         msg += render_expedition(e)
     if len(expeds) is 0:
-        msg += "None"
+        msg += "No expeditions"
     return msg
 
 
