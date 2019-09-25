@@ -1,6 +1,7 @@
 from datetime import datetime
 from custom_errors import *
 import pickle
+from threading import Lock
 
 
 class PlayerStats:
@@ -34,9 +35,9 @@ class Player:
 
 
 class ExpeditionMember:
-    def __init__(self, id, handle, label=None):
+    def __init__(self, tg_id, handle, label=None):
         self.tg_handle = handle
-        self.tg_id = id
+        self.tg_id = tg_id
         self.label = label
 
     def __eq__(self, other):
@@ -67,61 +68,86 @@ class Guild:
         self.expeditions = {}
         self.fort = Fort()
         self.pinned_message_id = None
+        self.chat_id = None
+        self.lock = Lock()
 
     # Members
     # TODO
 
     # Expeditions
     def new_expedition(self, title, time):
-        if title not in self.expeditions:
-            self.expeditions[title] = Expedition(title, time)
-            return self.expeditions[title]
-        else:
-            raise ExpeditionExistsError
+        with self.lock:
+            if title not in self.expeditions:
+                self.expeditions[title] = Expedition(title, time)
+                return self.expeditions[title]
+            else:
+                raise ExpeditionExistsError
 
     def set_expedition_time(self, title, time):
-        e = self.expeditions[title]
-        e.set_time(time)
-        self.expeditions[title] = e
-        return self.expeditions[title]
+        with self.lock:
+            e = self.get_expedition(title)
+            e.set_time(time)
+            return e
 
     def get_expedition(self, title):
-        return self.expeditions.get(title, None)
+        try:
+            return self.expeditions[title]
+        except KeyError:
+            raise ExpeditionNotFoundError
 
     def delete_expedition(self, title):
-        return self.expeditions.pop(title, None)
+        with self.lock:
+            try:
+                del self.expeditions[title]
+            except KeyError:
+                raise ExpeditionNotFoundError
 
     def checkin_expedition(self, title, tg_id, handle, label=None):
-        try:
-            e = self.expeditions[title]
-        except KeyError:
-            raise ExpeditionNotFoundError
-        if len(e.members) >= 10:
-            raise ExpeditionFullError
-        p = ExpeditionMember(tg_id, handle, label)
-        if p not in e.members:
-            e.members.append(p)
-            return self.expeditions[title], p
+        with self.lock:
+            try:
+                e = self.expeditions[title]
+            except KeyError:
+                raise ExpeditionNotFoundError
+            if len(e.members) >= 10:
+                raise ExpeditionFullError
+            p = ExpeditionMember(tg_id, handle, label)
+            if p not in e.members:
+                e.members.append(p)
+                return self.expeditions[title], p
+            else:
+                raise ExpedMemberAlreadyExists
 
     def checkout_expedition(self, title, tg_id, handle, label=None):
-        try:
-            e = self.expeditions[title]
-        except KeyError:
-            raise ExpeditionNotFoundError
-        p = ExpeditionMember(tg_id, handle, label)
-        if p in e.members:
-            e.members.remove(p)
-            return self.expeditions[title], p
+        with self.lock:
+            try:
+                e = self.expeditions[title]
+            except KeyError:
+                raise ExpeditionNotFoundError
+            p = ExpeditionMember(tg_id, handle, label)
+            if p in e.members:
+                e.members.remove(p)
+                return self.expeditions[title], p
+            else:
+                raise ExpedMemberNotFound
 
     def save(self):
-        with open("guild.pickle", "wb") as f:
-            pickle.dump(self, f)
+        with self.lock:
+            with open("guilds/{}.pickle".format(self.chat_id), "wb") as f:
+                pickle.dump(self, f)
 
     @staticmethod
-    def load():
-        with open("guild.pickle", "rb") as f:
+    def load(filename):
+        with open(filename, "rb") as f:
             return pickle.load(f)
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state['lock']
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__.update(d)
+        self.lock = Lock()
 
     # Fort
     # TODO

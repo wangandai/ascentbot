@@ -4,6 +4,8 @@ import models as m
 import datetime
 import threading
 import time
+from custom_errors import *
+import os
 
 
 def get_tg_token():
@@ -16,17 +18,24 @@ def get_polls():
         return f.readlines()
 
 
+def load_guilds():
+    gs = {}
+    suffix = ".pickle"
+    for filename in os.listdir("guilds"):
+        if filename.endswith(suffix):
+            g = m.Guild.load("guilds/{}".format(filename))
+            gs[g.chat_id] = g
+    return gs
+
+
 __token__ = get_tg_token()
 __polls__ = get_polls()
 __test_chat_id__ = "-331833019"
 __pin_msg_id__ = None
-count = 0
+guilds = load_guilds()
 
-bot = telebot.TeleBot(__token__)
-try:
-    guild = m.Guild.load()
-except:
-    guild = m.Guild()
+
+bot = telebot.AsyncTeleBot(__token__)
 
 
 def render_error_msg(doc):
@@ -44,7 +53,7 @@ def render_expedition(expedition):
     return msg
 
 
-def render_expeditions():
+def render_expeditions(guild):
     msg = ""
     expeds = list(guild.expeditions.values())
     expeds.sort(key=lambda x: x.time)
@@ -68,15 +77,16 @@ def exped_new(message):
     """
     parts = message.text.split(' ')
     if len(parts) != 4:
-        bot.send_message(message.chat.id, render_error_msg(doc))
-        return
+        raise WrongCommandError(doc)
     time = parts[3]
     title = parts[2]
+
     try:
+        guild = guilds[message.chat.id]
         e = guild.new_expedition(title, time)
-        bot.send_message(message.chat.id, "Expedition created: {} {}".format(e.name, time)
-    except (KeyError, ValueError):
-        bot.send_message(message.chat.id, render_error_msg(doc))
+        bot.send_message(message.chat.id, "Expedition created: {} {}".format(e.title, time))
+    except ValueError:
+        raise WrongCommandError(doc)
 
 
 def exped_time(message):
@@ -85,13 +95,13 @@ def exped_time(message):
         """
     parts = message.text.split(' ')
     if len(parts) != 4:
-        bot.send_message(message.chat.id, render_error_msg(doc))
-        return
+        raise WrongCommandError(doc)
     try:
-        guild.set_expedition_time(parts[2], parts[3])
-    except (KeyError, ValueError):
-        bot.send_message(message.chat.id, render_error_msg(doc))
-
+        guild = guilds[message.chat.id]
+        e = guild.set_expedition_time(parts[2], parts[3])
+        bot.send_message(message.chat.id, "{} updated to {}".format(e.title, parts[3]))
+    except ValueError:
+        raise WrongCommandError(doc)
 
 
 def exped_delete(message):
@@ -100,10 +110,11 @@ def exped_delete(message):
     """
     parts = message.text.split(' ')
     if len(parts) == 3:
+        guild = guilds[message.chat.id]
         guild.delete_expedition(parts[2])
+        bot.send_message(message.chat.id, "{} deleted.".format(parts[2]))
     else:
-        bot.send_message(message.chat.id, render_error_msg(doc))
-        return
+        raise WrongCommandError(doc)
 
 
 def exped_checkin(message):
@@ -117,16 +128,17 @@ def exped_checkin(message):
     elif len(parts) == 3:
         label = None
     else:
-        bot.send_message(message.chat.id, render_error_msg(doc))
-        return
+        raise WrongCommandError(doc)
 
     title = parts[2]
     handle = message.from_user.first_name
     handle_id = message.from_user.id
+    guild = guilds[message.chat.id]
     try:
-        guild.checkin_expedition(title, handle_id, handle, label)
-    except (KeyError, ValueError):
-        bot.send_message(message.chat.id, render_error_msg(doc))
+       exped, member = guild.checkin_expedition(title, handle_id, handle, label)
+       bot.send_message(message.chat.id, "{} checked in to {}".format(member.tg_handle, exped.title))
+    except ValueError:
+        raise WrongCommandError(doc)
 
 
 def exped_checkout(message):
@@ -140,23 +152,22 @@ def exped_checkout(message):
     elif len(parts) == 3:
         label = None
     else:
-        bot.send_message(message.chat.id, render_error_msg(doc))
-        return
+        raise WrongCommandError(doc)
 
     title = parts[2]
     handle = message.from_user.first_name
     handle_id = message.from_user.id
-    try:
-        guild.checkout_expedition(title, handle_id, handle, label)
-    except ExpeditionNotFoundError:
-        bot.send_message(message.chat.id, "Expedition name not found: {}".format(title))
+    guild = guilds[message.chat.id]
+    exped, member = guild.checkout_expedition(title, handle_id, handle, label)
+    bot.send_message(message.chat.id, "{} checked out of {}".format(member.tg_handle, exped.title))
 
 
 def exped_view(message):
     doc = """Possible messages:
 /exped view
     """
-    bot.send_message(message.chat.id, "Expeditions:\n{}".format(render_expeditions()), parse_mode="Markdown")
+    guild = guilds[message.chat.id]
+    bot.send_message(message.chat.id, "Expeditions:\n{}".format(render_expeditions(guild)), parse_mode="Markdown")
 
 
 exped_commands = {
@@ -169,20 +180,31 @@ exped_commands = {
 }
 
 
+def handle_command(commands, message, doc):
+    print(message.text)
+    try:
+        parts = message.text.split(' ')
+        if len(parts) >= 2 and parts[1] in commands:
+            command_str = parts[1]
+            commands[command_str](message)
+        else:
+            raise WrongCommandError(doc)
+    except Exception as e:
+        if issubclass(type(e), GuildError):
+            bot.send_message(message.chat.id, e.message)
+        else:
+            raise e
+
+
+@bot.edited_message_handler(commands=['exped'])
 @bot.message_handler(commands=['exped'])
 def exped(message):
     doc = """
 /exped command [arguments...]
 Available commands are : {}
     """.format([a for a in exped_commands.keys()])
-    print(message.text)
-    parts = message.text.split(' ')
-    if len(parts) >= 2 and parts[1] in exped_commands:
-        command_str = parts[1]
-        exped_commands[command_str](message)
-    else:
-        bot.send_message(message.chat.id, render_error_msg(doc))
-        return
+    handle_command(exped_commands, message, doc)
+    guild = guilds[message.chat.id]
     guild.save()
     # bot.delete_message(message.chat.id, message.message_id)
 
@@ -198,10 +220,12 @@ Available commands are : {}
 #                           reply_markup=create_poll_markup())
 
 
-def guild_pin(_):  # TODO: Change render_expeditions to render all
+def guild_pin(message):  # TODO: Change render_expeditions to render all
+    guild = guilds[message.chat.id]
     current_day = datetime.datetime.now().date()
     guild_msg = "Guild Admin {}/{}\n".format(current_day.month, current_day.day)
-    guild_msg += render_expeditions() if render_expeditions() is not None else ""
+    expds = render_expeditions(guild)
+    guild_msg += expds if expds is not None else ""
     if guild.pinned_message_id is None:
         guild.pinned_message_id = bot.send_message(__test_chat_id__, guild_msg, parse_mode="Markdown").message_id
     else:
@@ -215,20 +239,15 @@ guild_commands = {
 }
 
 
+@bot.edited_message_handler(commands=['admin'])
 @bot.message_handler(commands=['admin'])
 def admin(message):
     doc = """
 /guild command [arguments...]
 Available commands are : {}
     """.format([a for a in guild_commands.keys()])
-    print(message.text)
-    parts = message.text.split(' ')
-    if len(parts) >= 2 and parts[1] in guild_commands:
-        command_str = parts[1]
-        guild_commands[command_str](message)
-    else:
-        bot.send_message(message.chat.id, render_error_msg(doc))
-        return
+    handle_command(guild_commands, message, doc)
+    guild = guilds[message.chat.id]
     guild.save()
 
 
@@ -246,10 +265,28 @@ class GuildAutomation(object):
             # Daily pinned message
 
             # Expedition Reminders
-            for e in guild.expeditions.values():
-                if e.time.hour == now.hour and e.time.minute == now.minute:
-                    bot.send_message(__test_chat_id__, render_expeditions(), parse_mode="Markdown")
+            for guild in guilds.values():
+                for e in guild.expeditions.values():
+                    if e.time.hour == now.hour and e.time.minute == now.minute:
+                        bot.send_message(__test_chat_id__, render_expeditions(), parse_mode="Markdown")
             time.sleep(30)
+
+
+@bot.message_handler(commands=['start'])
+def start(message):
+    if message.chat.id in guilds:
+        bot.send_message(message.chat.id, "Guild bot ready.")
+        return
+    guild = m.Guild()
+    guilds[message.chat.id] = guild
+    guild.chat_id = message.chat.id
+    bot.send_message(message.chat.id, "Guild bot initiated.")
+
+
+@bot.message_handler(commands=['reset_guild'])
+def reset(message):
+    guilds.pop(message.chat.id, None)
+    start(message)
 
 
 GuildAutomation()
