@@ -30,6 +30,6 @@ class ExpedMemberNotFound(GuildError):
 
 class WrongCommandError(GuildError):
     def __init__(self, doc=""):
-        self.message = "Improper command."
+        self.message = "Invalid command."
         if len(doc) > 0:
             self.message += "\n{}".format(doc)

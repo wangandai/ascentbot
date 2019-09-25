@@ -38,10 +38,6 @@ guilds = load_guilds()
 bot = telebot.AsyncTeleBot(__token__)
 
 
-def render_error_msg(doc):
-    return "Please send command in format: {}".format(doc)
-
-
 def render_expedition(expedition):
     msg = "\n"
     msg += "*{}* {} ({} 👥)\n".format(expedition.title,
@@ -69,6 +65,22 @@ def create_poll_markup():
     for poll in __polls__:
         markup.add(types.InlineKeyboardButton(poll, callback_data=poll))
     return markup
+
+
+def handle_command(commands, message, doc):
+    print(message.text)
+    try:
+        parts = message.text.split(' ')
+        if len(parts) >= 2 and parts[1] in commands:
+            command_str = parts[1]
+            commands[command_str](message)
+        else:
+            raise WrongCommandError(doc)
+    except Exception as e:
+        if issubclass(type(e), GuildError):
+            bot.send_message(message.chat.id, e.message)
+        else:
+            raise e
 
 
 def exped_new(message):
@@ -178,22 +190,6 @@ exped_commands = {
     'time': exped_time,
     'view': exped_view
 }
-
-
-def handle_command(commands, message, doc):
-    print(message.text)
-    try:
-        parts = message.text.split(' ')
-        if len(parts) >= 2 and parts[1] in commands:
-            command_str = parts[1]
-            commands[command_str](message)
-        else:
-            raise WrongCommandError(doc)
-    except Exception as e:
-        if issubclass(type(e), GuildError):
-            bot.send_message(message.chat.id, e.message)
-        else:
-            raise e
 
 
 @bot.edited_message_handler(commands=['exped'])
