@@ -2,6 +2,7 @@ from datetime import datetime
 from custom_errors import *
 import pickle
 from threading import Lock
+import os
 
 
 class PlayerStats:
@@ -64,12 +65,14 @@ class Fort:
 
 class Guild:
     def __init__(self):
+        self.title = ""
         self.members = []
         self.expeditions = {}
         self.fort = Fort()
         self.pinned_message_id = None
         self.chat_id = None
         self.lock = Lock()
+        self.daily_reset_time = 3
 
     # Members
     # TODO
@@ -130,6 +133,15 @@ class Guild:
             else:
                 raise ExpedMemberNotFound
 
+    def set_reset_time(self, time):
+        with self.lock:
+            self.daily_reset_time = time
+
+    def reset_expeditions(self):
+        with self.lock:
+            for e in self.expeditions:
+                e.members = []
+
     def save(self):
         with self.lock:
             with open("guilds/{}.pickle".format(self.chat_id), "wb") as f:
@@ -151,3 +163,29 @@ class Guild:
 
     # Fort
     # TODO
+
+
+class Guilds:
+    def __init__(self):
+        self.guilds = {}
+        suffix = ".pickle"
+        for filename in os.listdir("guilds"):
+            if filename.endswith(suffix):
+                g = Guild.load("guilds/{}".format(filename))
+                self.guilds[g.chat_id] = g
+                print("Loaded guild {} (id: {}".format(g.title, g.chat_id))
+
+    def get(self, guild_chat_id):
+        try:
+            return self.guilds[guild_chat_id]
+        except KeyError:
+            raise GuildNotFoundError
+
+    def set(self, guild_chat_id, guild):
+        self.guilds[guild_chat_id] = guild
+
+    def values(self):
+        return self.guilds.values()
+
+    def keys(self):
+        return self.guilds.keys()

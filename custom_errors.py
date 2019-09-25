@@ -3,6 +3,11 @@ class GuildError(Exception):
         self.message = "A guild error."
 
 
+class GuildNotFoundError(GuildError):
+    def __init__(self):
+        self.message = "Guild is not initialized. Run /start <guild_name> first."
+
+
 class ExpeditionExistsError(GuildError):
     def __init__(self):
         self.message = "Expedition already exists."
