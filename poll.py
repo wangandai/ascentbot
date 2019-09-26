@@ -7,7 +7,7 @@ import time
 from custom_errors import *
 import os
 import logging
-import flask
+from flask import Flask, request
 
 
 def get_tg_token():
@@ -16,17 +16,9 @@ def get_tg_token():
 
 
 __token__ = get_tg_token()
+telebot.logger.setLevel(logging.INFO)
 bot = telebot.AsyncTeleBot(__token__)
-
-
-def load_guilds():
-    gs = {}
-    suffix = ".pickle"
-    for filename in os.listdir("guilds"):
-        if filename.endswith(suffix):
-            g = m.Guild.load("guilds/{}".format(filename))
-            gs[g.chat_id] = g
-    return gs
+guilds = m.Guilds()
 
 
 ################################
@@ -314,7 +306,7 @@ def start(message):
 
 @bot.message_handler(commands=['reset_guild'])
 def reset(message):
-    guilds.pop(message.chat.id, None)
+    guilds.guilds.pop(message.chat.id, None)
     start(message)
 
 
@@ -346,44 +338,30 @@ class GuildAutomation(object):
             time.sleep(60 * 60)
 
 
+GuildAutomation()
+
+
 if __name__ == "__main__":
-    guilds = m.Guilds()
 
-    telebot.logger.setLevel(logging.INFO)
+    print(os.getenv("LISTEN_MODE"))
+    if os.getenv("LISTEN_MODE") == "webhook":
+        server = Flask(__name__)
 
-    GuildAutomation()
+        @server.route('/' + __token__, methods=['POST'])
+        def getMessage():
+            bot.process_new_updates([telebot.types.Update.de_json(request.stream.read().decode("utf-8"))])
+            return "!", 200
 
-    if os.getenv('ENV') == 'pythonanywhere':
-        telebot.apihelper.proxy = {'http': 'http://proxy.server:3128'}
 
-        WEBHOOK_HOST = '<ip/host where the bot is running>'
-        WEBHOOK_PORT = 8443  # 443, 80, 88 or 8443 (port need to be 'open')
-        WEBHOOK_LISTEN = '0.0.0.0'  # In some VPS you may need to put here the IP addr
-
-        WEBHOOK_URL_BASE = "https://%s:%s" % (WEBHOOK_HOST, WEBHOOK_PORT)
-        WEBHOOK_URL_PATH = "/%s/" % (__token__)
-
-        app = flask.Flask(__name__)
-
-        @app.route(WEBHOOK_URL_PATH, methods=['POST'])
+        @server.route("/")
         def webhook():
-            if flask.request.headers.get('content-type') == 'application/json':
-                json_string = flask.request.get_data().decode('utf-8')
-                update = telebot.types.Update.de_json(json_string)
-                bot.process_new_updates([update])
-                return ''
-            else:
-                flask.abort(403)
+            bot.remove_webhook()
+            bot.set_webhook(url="{}/{}".format(os.environ.get('WEBHOOK_HOST', 'localhost:5000'), __token__))
+            return "!", 200
 
-        bot.remove_webhook()
 
-        time.sleep(0.1)
-
-        bot.set_webhook(url=WEBHOOK_URL_BASE + WEBHOOK_URL_PATH)
-
-        app.run(host=WEBHOOK_LISTEN,
-                port=WEBHOOK_PORT,
-                debug=True)
+        server.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
 
     else:
+        bot.remove_webhook()
         bot.polling(none_stop=True)
