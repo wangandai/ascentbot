@@ -8,17 +8,16 @@ from custom_errors import *
 import os
 import logging
 from flask import Flask, request
+from dotenv import load_dotenv
+load_dotenv()
 
 
-def get_tg_token():
-    with open('tg_token', 'r') as f:
-        return f.readline()
-
-
-__token__ = get_tg_token()
+__token__ = os.getenv("TG_TOKEN")
 telebot.logger.setLevel(logging.INFO)
 bot = telebot.AsyncTeleBot(__token__)
-guilds = m.Guilds()
+
+guilds = m.Guilds.load()
+
 
 
 ################################
@@ -96,7 +95,7 @@ def handle_command(commands, message, doc):
                                       message_id=guild.pinned_message_id,
                                       parse_mode="Markdown",
                                       reply_markup=render_poll_markup(guild))
-            guild.save()
+            guilds.save()
         else:
             raise WrongCommandError(doc)
     except Exception as e:
@@ -298,7 +297,7 @@ def start(message):
         guilds.set(message.chat.id, guild)
         guild.chat_id = message.chat.id
         guild.title = message.chat.title
-        guild.save()
+        guilds.save()
         bot.send_message(message.chat.id, "Guild bot initialized.")
 
 

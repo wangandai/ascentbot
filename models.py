@@ -2,7 +2,9 @@ from datetime import datetime
 from custom_errors import *
 import pickle
 from threading import Lock
-import os
+import storage
+
+storage = storage.Storage()
 
 
 class PlayerStats:
@@ -172,14 +174,10 @@ class Guild:
 
 
 class Guilds:
+    savefile = "guilds.pickle"
+
     def __init__(self):
         self.guilds = {}
-        suffix = ".pickle"
-        for filename in os.listdir("guilds"):
-            if filename.endswith(suffix):
-                g = Guild.load("guilds/{}".format(filename))
-                self.guilds[g.chat_id] = g
-                print("Loaded guild [{}] (id: {})".format(g.title, g.chat_id))
 
     def get(self, guild_chat_id):
         try:
@@ -195,3 +193,14 @@ class Guilds:
 
     def keys(self):
         return self.guilds.keys()
+
+    def save(self):
+        storage.savefile(self, self.savefile)
+
+    @staticmethod
+    def load():
+        g = storage.loadfile(Guilds.savefile)
+        if g is not None:
+            return g
+        else:
+            return Guilds()

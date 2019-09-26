@@ -6,6 +6,8 @@ name = "pypi"
 [packages]
 pytelegrambotapi = "*"
 flask = "*"
+"boto3" = "*"
+python-dotenv = "*"
 
 [dev-packages]
 

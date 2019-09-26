@@ -1,2 +1,6 @@
 .idea
 tg_token*
+.env
+*.swp
+__pycache__/
+requirements.txt
