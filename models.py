@@ -3,6 +3,7 @@ from custom_errors import *
 import pickle
 from threading import Lock
 import storage
+import os
 
 storage = storage.Storage()
 
@@ -38,7 +39,7 @@ class Player:
 
 
 class ExpeditionMember:
-    def __init__(self, tg_id, handle, label=None):
+    def __init__(self, tg_id, handle, label=""):
         self.tg_handle = handle
         self.tg_id = tg_id
         self.label = label
@@ -116,7 +117,7 @@ class Guild:
             except KeyError:
                 raise ExpeditionNotFoundError
 
-    def checkin_expedition(self, title, tg_id, handle, label=None):
+    def checkin_expedition(self, title, tg_id, handle, label=""):
         with self.lock:
             e = self.get_expedition(title)
             if len(e.members) >= 10:
@@ -128,7 +129,7 @@ class Guild:
             else:
                 raise ExpedMemberAlreadyExists
 
-    def checkout_expedition(self, title, tg_id, handle, label=None):
+    def checkout_expedition(self, title, tg_id, handle, label=""):
         with self.lock:
             try:
                 e = self.expeditions[title]
@@ -174,7 +175,7 @@ class Guild:
 
 
 class Guilds:
-    savefile = "guilds.pickle"
+    savefile = "{}.guilds".format(os.getenv("MODE", "dev"))
 
     def __init__(self):
         self.guilds = {}
@@ -199,8 +200,8 @@ class Guilds:
 
     @staticmethod
     def load():
+        _g = Guilds()
         g = storage.loadfile(Guilds.savefile)
         if g is not None:
-            return g
-        else:
-            return Guilds()
+            _g.__dict__.update(g.__dict__)
+        return _g

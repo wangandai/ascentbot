@@ -8,6 +8,7 @@ pytelegrambotapi = "*"
 flask = "*"
 "boto3" = "*"
 python-dotenv = "*"
+pytz = "*"
 
 [dev-packages]
 
