@@ -44,7 +44,7 @@ class ExpeditionMember:
     def __eq__(self, other):
         if type(other) is not ExpeditionMember:
             return False
-        return self.tg_id == other.tg_id and self.tg_handle == other.tg_handle and self.label == other.label
+        return self.tg_id == other.tg_id and self.label.lower() == other.label.lower()
 
 
 class Expedition:
@@ -84,9 +84,12 @@ class Guild:
     # Expeditions
     def new_expedition(self, title, time, description=""):
         with self.lock:
-            if title not in self.expeditions:
-                self.expeditions[title] = Expedition(title, time, description)
-                return self.expeditions[title]
+            try:
+                self.get_expedition(title)
+            except ExpeditionNotFoundError:
+                slug = title.lower()
+                self.expeditions[slug] = Expedition(title, time, description)
+                return self.expeditions[slug]
             else:
                 raise ExpeditionExistsError
 
@@ -98,29 +101,28 @@ class Guild:
 
     def get_expedition(self, title):
         try:
-            return self.expeditions[title]
+            slug = title.lower()
+            return self.expeditions[slug]
         except KeyError:
             raise ExpeditionNotFoundError
 
     def delete_expedition(self, title):
         with self.lock:
             try:
-                del self.expeditions[title]
+                slug = title.lower()
+                del self.expeditions[slug]
             except KeyError:
                 raise ExpeditionNotFoundError
 
     def checkin_expedition(self, title, tg_id, handle, label=None):
         with self.lock:
-            try:
-                e = self.expeditions[title]
-            except KeyError:
-                raise ExpeditionNotFoundError
+            e = self.get_expedition(title)
             if len(e.members) >= 10:
                 raise ExpeditionFullError
             p = ExpeditionMember(tg_id, handle, label)
             if p not in e.members:
                 e.members.append(p)
-                return self.expeditions[title], p
+                return e, p
             else:
                 raise ExpedMemberAlreadyExists
 
@@ -144,7 +146,7 @@ class Guild:
     def reset_expeditions(self):
         with self.lock:
             for e in self.expeditions:
-                e.members = []
+                self.expeditions[e].members = []
 
     def save(self):
         with self.lock:

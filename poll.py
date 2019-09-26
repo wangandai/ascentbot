@@ -191,7 +191,7 @@ def exped_checkin(message, send_message=True):
     """
     parts = message.text.split(' ')
     if len(parts) == 4:
-        label = parts[3].lower()
+        label = parts[3]
     elif len(parts) == 3:
         label = None
     else:
@@ -201,12 +201,10 @@ def exped_checkin(message, send_message=True):
     handle = message.from_user.first_name
     handle_id = message.from_user.id
     guild = guilds.get(message.chat.id)
-    try:
-        e, member = guild.checkin_expedition(title, handle_id, handle, label)
-        if send_message:
-            bot.send_message(message.chat.id, "{} checked in to {}".format(member.tg_handle, e.title))
-    except ValueError:
-        raise WrongCommandError(doc)
+
+    e, member = guild.checkin_expedition(title, handle_id, handle, label)
+    if send_message:
+        bot.send_message(message.chat.id, "{} checked in to {}".format(member.tg_handle, e.title))
 
 
 def exped_checkout(message, send_message=True):
@@ -226,8 +224,8 @@ def exped_checkout(message, send_message=True):
     handle = message.from_user.first_name
     handle_id = message.from_user.id
     guild = guilds.get(message.chat.id)
-    exped, member = guild.checkout_expedition(title, handle_id, handle, label)
 
+    exped, member = guild.checkout_expedition(title, handle_id, handle, label)
     if send_message:
         bot.send_message(message.chat.id, "{} checked out of {}".format(member.tg_handle, exped.title))
 
@@ -343,7 +341,6 @@ GuildAutomation()
 
 if __name__ == "__main__":
 
-    print(os.getenv("LISTEN_MODE"))
     if os.getenv("LISTEN_MODE") == "webhook":
         server = Flask(__name__)
 
