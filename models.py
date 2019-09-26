@@ -48,13 +48,17 @@ class ExpeditionMember:
 
 
 class Expedition:
-    def __init__(self, title, time):
+    def __init__(self, title, time, description=""):
         self.time = datetime.strptime(time, "%H%M").time()
         self.title = title
         self.members = []
+        self.description = description
 
     def set_time(self, time_string):
         self.time = datetime.strptime(time_string, "%H%M").time()
+
+    def set_description(self, description):
+        self.description = description
 
 
 class Fort:
@@ -78,10 +82,10 @@ class Guild:
     # TODO
 
     # Expeditions
-    def new_expedition(self, title, time):
+    def new_expedition(self, title, time, description=""):
         with self.lock:
             if title not in self.expeditions:
-                self.expeditions[title] = Expedition(title, time)
+                self.expeditions[title] = Expedition(title, time, description)
                 return self.expeditions[title]
             else:
                 raise ExpeditionExistsError
@@ -173,7 +177,7 @@ class Guilds:
             if filename.endswith(suffix):
                 g = Guild.load("guilds/{}".format(filename))
                 self.guilds[g.chat_id] = g
-                print("Loaded guild {} (id: {}".format(g.title, g.chat_id))
+                print("Loaded guild [{}] (id: {})".format(g.title, g.chat_id))
 
     def get(self, guild_chat_id):
         try:

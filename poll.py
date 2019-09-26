@@ -7,6 +7,7 @@ import time
 from custom_errors import *
 import os
 import logging
+import flask
 
 
 def get_tg_token():
@@ -14,9 +15,8 @@ def get_tg_token():
         return f.readline()
 
 
-def get_polls():
-    with open('polls', 'r') as f:
-        return f.readlines()
+__token__ = get_tg_token()
+bot = telebot.AsyncTeleBot(__token__)
 
 
 def load_guilds():
@@ -29,21 +29,29 @@ def load_guilds():
     return gs
 
 
-__token__ = get_tg_token()
-__polls__ = get_polls()
-__test_chat_id__ = "-331833019"
-__pin_msg_id__ = None
-guilds = m.Guilds()
-
-
-telebot.logger.setLevel(logging.DEBUG)
-bot = telebot.AsyncTeleBot(__token__)
+################################
+#       Renderers              #
+################################
+def render_adv_text():
+    return """
+Advanced commands:
+Checkin with alt:
+/exped checkin <team> <alt>
+Checkout with alt:
+/exped checkout <team> <alt>
+Create new expedition
+/exped new <team> <HHMM> <description>
+Delete expedition
+/exped delete <team>
+"""
 
 
 def render_expedition(expedition):
-    msg = "🌋 {}    🕑 {}    👥 {}\n".format(expedition.title,
-                                      datetime.time.strftime(expedition.time, "%H%M"),
-                                      len(expedition.members))
+    msg = "⚔️ {}    🕑 {}    👥 {}\n".format(expedition.title,
+                                             datetime.time.strftime(expedition.time, "%H%M"),
+                                             len(expedition.members))
+    if len(expedition.description) > 0:
+        msg += "📋 {}\n".format(expedition.description)
     for i, member in enumerate(expedition.members):
         msg += "{}. [{}](tg://user?id={}) {}\n".format(i + 1, member.tg_handle, member.tg_id,
                                                        member.label if member.label is not None else "")
@@ -63,18 +71,26 @@ def render_expeditions(guild):
 
 def render_guild_admin(guild):
     current_day = datetime.datetime.now().date()
-    guild_msg = "Guild Admin {}/{}\n".format(current_day.month, current_day.day)
+    guild_msg = "Guild Admin {}/{}\n\n".format(current_day.month, current_day.day)
     guild_msg += render_expeditions(guild)
+    guild_msg += "\n"
+    guild_msg += render_adv_text()
     return guild_msg
 
 
-def create_poll_markup():
+def render_poll_markup(guild):
     markup = types.InlineKeyboardMarkup()
-    for poll in __polls__:
-        markup.add(types.InlineKeyboardButton(poll, callback_data=poll))
+    # Render exped polls
+    expeds = list(guild.expeditions.values())
+    expeds.sort(key=lambda x: x.time)
+    for e in expeds:
+        markup.add(types.InlineKeyboardButton(e.title, callback_data="expedition:{}".format(e.title)))
     return markup
 
 
+################################
+#       Middleware             #
+################################
 def handle_command(commands, message, doc):
     try:
         guild = guilds.get(message.chat.id)
@@ -86,7 +102,8 @@ def handle_command(commands, message, doc):
                 bot.edit_message_text(render_guild_admin(guild),
                                       chat_id=message.chat.id,
                                       message_id=guild.pinned_message_id,
-                                      parse_mode="Markdown")
+                                      parse_mode="Markdown",
+                                      reply_markup=render_poll_markup(guild))
             guild.save()
         else:
             raise WrongCommandError(doc)
@@ -97,19 +114,51 @@ def handle_command(commands, message, doc):
             raise e
 
 
+################################
+#       Callback Handlers      #
+################################
+@bot.callback_query_handler(func=lambda c: c.data.startswith("expedition:"))
+def exped_cb_handle(call):
+    # monkey patch message data to format of checkin/checkout message with expedition title only
+    call.message.text = "_ _ {}".format(call.data[len("expedition:"):])
+    call.message.from_user = call.from_user
+    try:
+        exped_checkin(call.message, send_message=False)
+        answer_text = "Check in successful."
+    except ExpedMemberAlreadyExists:
+        exped_checkout(call.message, send_message=False)
+        answer_text = "Check out successful."
+    guild = guilds.get(call.message.chat.id)
+    if guild.pinned_message_id is not None:
+        bot.edit_message_text(render_guild_admin(guild),
+                              chat_id=call.message.chat.id,
+                              message_id=guild.pinned_message_id,
+                              parse_mode="Markdown",
+                              reply_markup=render_poll_markup(guild))
+    bot.answer_callback_query(call.id, text=answer_text)
+
+
+################################
+#       Expedition Handlers    #
+################################
 def exped_new(message):
     doc = """
 /exped new team1 1500
+/exped new team1 1500 description
     """
-    parts = message.text.split(' ')
-    if len(parts) != 4:
+    parts = message.text.split(' ', 4)
+    if len(parts) not in [4, 5]:
         raise WrongCommandError(doc)
     time = parts[3]
     title = parts[2]
+    try:
+        description = parts[4]
+    except IndexError:
+        description = ""
 
     try:
         guild = guilds.get(message.chat.id)
-        e = guild.new_expedition(title, time)
+        e = guild.new_expedition(title, time, description)
         bot.send_message(message.chat.id, "Expedition created: {} {}".format(e.title, time))
     except ValueError:
         raise WrongCommandError(doc)
@@ -143,7 +192,7 @@ def exped_delete(message):
         raise WrongCommandError(doc)
 
 
-def exped_checkin(message):
+def exped_checkin(message, send_message=True):
     doc = """
 /exped checkin team
 /exped checkin team [label]
@@ -161,13 +210,14 @@ def exped_checkin(message):
     handle_id = message.from_user.id
     guild = guilds.get(message.chat.id)
     try:
-       exped, member = guild.checkin_expedition(title, handle_id, handle, label)
-       bot.send_message(message.chat.id, "{} checked in to {}".format(member.tg_handle, exped.title))
+        e, member = guild.checkin_expedition(title, handle_id, handle, label)
+        if send_message:
+            bot.send_message(message.chat.id, "{} checked in to {}".format(member.tg_handle, e.title))
     except ValueError:
         raise WrongCommandError(doc)
 
 
-def exped_checkout(message):
+def exped_checkout(message, send_message=True):
     doc = """
 /exped checkout team
 /exped checkout team [label]
@@ -185,7 +235,9 @@ def exped_checkout(message):
     handle_id = message.from_user.id
     guild = guilds.get(message.chat.id)
     exped, member = guild.checkout_expedition(title, handle_id, handle, label)
-    bot.send_message(message.chat.id, "{} checked out of {}".format(member.tg_handle, exped.title))
+
+    if send_message:
+        bot.send_message(message.chat.id, "{} checked out of {}".format(member.tg_handle, exped.title))
 
 
 def exped_view(message):
@@ -217,21 +269,16 @@ Available commands are : {}
     # bot.delete_message(message.chat.id, message.message_id)
 
 
-# @bot.callback_query_handler(func=lambda call: call.data in __polls__)
-# def receive_poll(call):
-#     print(call)
-#     global count
-#     count = count + 1
-#     bot.edit_message_text("thanks {}".format(count),
-#                           message_id=call.message.message_id,
-#                           chat_id=call.message.chat.id,
-#                           reply_markup=create_poll_markup())
-
-
+################################
+#       Admin Handlers         #
+################################
 def guild_pin(message):
     guild = guilds.get(message.chat.id)
     guild_msg = render_guild_admin(guild)
-    sent = bot.send_message(guild.chat_id, guild_msg, parse_mode="Markdown").wait()
+    sent = bot.send_message(guild.chat_id,
+                            guild_msg,
+                            parse_mode="Markdown",
+                            reply_markup=render_poll_markup(guild)).wait()
     guild.pinned_message_id = sent.message_id
     bot.pin_chat_message(guild.chat_id, guild.pinned_message_id)
 
@@ -287,7 +334,7 @@ class GuildAutomation(object):
             for guild in guilds.values():
                 for e in guild.expeditions.values():
                     if e.time.hour == now.hour and e.time.minute == now.minute:
-                        bot.send_message(__test_chat_id__, render_expeditions(guild), parse_mode="Markdown")
+                        bot.send_message(guild.chat_id, render_expeditions(guild), parse_mode="Markdown")
             time.sleep(30)
 
     def daily_reset(self):
@@ -299,5 +346,44 @@ class GuildAutomation(object):
             time.sleep(60 * 60)
 
 
-GuildAutomation()
-bot.polling(none_stop=True)
+if __name__ == "__main__":
+    guilds = m.Guilds()
+
+    telebot.logger.setLevel(logging.INFO)
+
+    GuildAutomation()
+
+    if os.getenv('ENV') == 'pythonanywhere':
+        telebot.apihelper.proxy = {'http': 'http://proxy.server:3128'}
+
+        WEBHOOK_HOST = '<ip/host where the bot is running>'
+        WEBHOOK_PORT = 8443  # 443, 80, 88 or 8443 (port need to be 'open')
+        WEBHOOK_LISTEN = '0.0.0.0'  # In some VPS you may need to put here the IP addr
+
+        WEBHOOK_URL_BASE = "https://%s:%s" % (WEBHOOK_HOST, WEBHOOK_PORT)
+        WEBHOOK_URL_PATH = "/%s/" % (__token__)
+
+        app = flask.Flask(__name__)
+
+        @app.route(WEBHOOK_URL_PATH, methods=['POST'])
+        def webhook():
+            if flask.request.headers.get('content-type') == 'application/json':
+                json_string = flask.request.get_data().decode('utf-8')
+                update = telebot.types.Update.de_json(json_string)
+                bot.process_new_updates([update])
+                return ''
+            else:
+                flask.abort(403)
+
+        bot.remove_webhook()
+
+        time.sleep(0.1)
+
+        bot.set_webhook(url=WEBHOOK_URL_BASE + WEBHOOK_URL_PATH)
+
+        app.run(host=WEBHOOK_LISTEN,
+                port=WEBHOOK_PORT,
+                debug=True)
+
+    else:
+        bot.polling(none_stop=True)
