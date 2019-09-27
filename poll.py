@@ -112,7 +112,13 @@ def exped_cb_handle(call):
     # monkey patch message data to format of checkin/checkout message with expedition title only
     call.message.text = "_ _ {}".format(call.data[len("expedition:"):])
     call.message.from_user = call.from_user
-    answer_text = exped_reg(call.message)
+    try:
+        answer_text = exped_reg(call.message)
+    except Exception as e:
+        if issubclass(type(e), GuildError):
+            answer_text = e.message
+        else:
+            raise e
     guild = guilds.get(call.message.chat.id)
     if guild.pinned_message_id is not None:
         bot.edit_message_text(render_guild_admin(guild),
