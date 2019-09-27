@@ -127,6 +127,7 @@ def exped_cb_handle(call):
                               parse_mode="Markdown",
                               reply_markup=render_poll_markup(guild))
     bot.answer_callback_query(call.id, text=answer_text)
+    guilds.save()
 
 
 ################################
