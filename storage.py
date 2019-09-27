@@ -8,6 +8,7 @@ load_dotenv()
 CLOUDCUBE = "cloudcube"
 
 
+# TODO: Change to json serialization instead of pickle
 class Storage:
     def __init__(self):
         if os.getenv("STORAGE") == CLOUDCUBE:

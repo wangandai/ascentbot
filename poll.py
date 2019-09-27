@@ -73,7 +73,11 @@ def render_poll_markup(guild):
     expeds = list(guild.expeditions.values())
     expeds.sort(key=lambda x: x.time)
     for e in expeds:
-        markup.add(types.InlineKeyboardButton(e.title, callback_data="/exped reg {}".format(e.title)))
+        markup.add(types.InlineKeyboardButton("{} ({})".format(e.title, e.time.strftime("%H%M")),
+                                              callback_data="/exped reg {}".format(e.title)))
+    # Render fort attendance poll
+    markup.add(types.InlineKeyboardButton("Attended fort today",
+                                          callback_data="/fort mark"))
     return markup
 
 
@@ -129,6 +133,7 @@ def handle_callback(commands, call):
 def cb_query_handler(call):
     cb_handlers = {
         'reg': exped_reg,
+        'mark': fort_mark,
     }
     handle_callback(cb_handlers, call)
 
@@ -239,6 +244,72 @@ Available commands are : {}
 
 
 ################################
+#       Fort Handlers          #
+################################
+def fort_mark(message):
+    doc = """Possible messages:
+/fort mark
+/fort mark <alt>
+"""
+    parts = message.text.split(' ')
+    if len(parts) == 3:
+        label = parts[2]
+    elif len(parts) == 2:
+        label = ""
+    else:
+        raise WrongCommandError(doc)
+
+    guild = guilds.get(message.chat.id)
+    handle = message.from_user.first_name
+    handle_id = message.from_user.id
+
+    try:
+        guild.fort_mark(handle_id, handle, label)
+        return "Attendance added for {}".format(handle)
+    except FortAttendanceExistsError:
+        guild.fort_unmark(handle_id, handle, label)
+        return "Attendance removed for {}".format(handle)
+
+
+def fort_check(message):
+    doc = """Possible messages:
+/fort check
+/fort check <alt>
+    """
+    parts = message.text.split(' ')
+    if len(parts) == 3:
+        label = parts[2]
+    elif len(parts) == 2:
+        label = ""
+    else:
+        raise WrongCommandError(doc)
+
+    guild = guilds.get(message.chat.id)
+    handle = message.from_user.first_name
+    handle_id = message.from_user.id
+
+    try:
+        result = guild.get_history_of(handle_id, handle, label)
+        return "Attendance for {}: {}".format(handle, result)
+    except FortAttendanceNotFoundError:
+        return "Attendance not found for {}".format(handle)
+
+
+@bot.edited_message_handler(commands=['fort'])
+@bot.message_handler(commands=['fort'])
+def fort(message):
+    fort_commands = {
+        'mark': fort_mark,
+        'check': fort_check,
+    }
+    doc = """
+/fort command [arguments...]
+Available commands are : {}
+    """.format([a for a in fort_commands.keys()])
+    handle_command(fort_commands, message, doc)
+
+
+################################
 #       Admin Handlers         #
 ################################
 def _guild_pin(chat_id):
@@ -301,13 +372,14 @@ def equal_hour_minute(time1, time2):
 
 class GuildAutomation(object):
     def __init__(self):
-        thread_exped = threading.Thread(target=self.exped_reminder, args=())
-        thread_exped.daemon = True
-        thread_exped.start()
-
-        thread_reset = threading.Thread(target=self.daily_reset, args=())
-        thread_reset.daemon = True
-        thread_reset.start()
+        tasks = [
+            self.daily_reset,
+            self.exped_reminder,
+        ]
+        for task in tasks:
+            thread = threading.Thread(target=task, args=())
+            thread.daemon = True
+            thread.start()
 
     def exped_reminder(self):
         while True:
@@ -325,8 +397,9 @@ class GuildAutomation(object):
         while True:
             now = get_singapore_time_now()
             for guild in guilds.values():
-                if now.hour == guild.daily_reset_time:
+                if now.hour == guild.daily_reset_time or True:
                     guild.reset_expeditions()
+                    guild.update_fort_history()
                     _guild_pin(guild.chat_id)
             guilds.save()
             time.sleep(60 * 60)

@@ -28,9 +28,19 @@ class ExpedMemberAlreadyExists(GuildError):
         self.message = "Member already in expedition."
 
 
-class ExpedMemberNotFound(GuildError):
+class ExpedMemberNotFoundError(GuildError):
     def __init__(self):
         self.message = "Member not found in expedition."
+
+
+class FortAttendanceExistsError(GuildError):
+    def __init__(self):
+        self.message = "Attendance already marked."
+
+
+class FortAttendanceNotFoundError(GuildError):
+    def __init__(self):
+        self.message = "Attendance not found."
 
 
 class WrongCommandError(GuildError):

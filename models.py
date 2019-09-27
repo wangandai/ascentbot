@@ -8,36 +8,12 @@ import os
 storage = storage.Storage()
 
 
-class PlayerStats:
-    def __init__(self):
-        pass
-
-    def __eq__(self, other):  # TODO
-        return True
+def ensure_attribute_exists(obj, attr, default):
+    if not hasattr(obj, attr) or getattr(obj, attr) is None:  # For backward compatibility
+        setattr(obj, attr, default)
 
 
-class TelegramInfo:
-    def __init__(self):
-        self.handle = None
-        self.id = None
-
-    def __eq__(self, other):
-        if type(other) is not TelegramInfo:
-            return False
-        return self.id == other.id
-
-
-class Player:
-    def __init__(self):
-        self.telegram = TelegramInfo()
-        self.stats = PlayerStats()
-
-    def __eq__(self, other):
-        if type(other) is not Player:
-            return False
-        return self.telegram == other.telegram and self.stats == other.stats
-
-
+# TODO: Change name to "Player"
 class ExpeditionMember:
     def __init__(self, tg_id, handle, label=""):
         self.tg_handle = handle
@@ -48,6 +24,9 @@ class ExpeditionMember:
         if type(other) is not ExpeditionMember:
             return False
         return self.tg_id == other.tg_id and self.label.lower() == other.label.lower()
+
+    def __hash__(self):
+        return hash("{}_{}".format(self.tg_id, self.label.lower()))
 
 
 class Expedition:
@@ -68,6 +47,8 @@ class Fort:
     def __init__(self):
         self.reminder_time = None
         self.roster = []
+        self.attendance = []
+        self.history = {}
 
 
 class Guild:
@@ -137,7 +118,7 @@ class Guild:
                 e.members.remove(p)
                 return e, p
             else:
-                raise ExpedMemberNotFound
+                raise ExpedMemberNotFoundError
 
     def set_reset_time(self, time):
         with self.lock:
@@ -152,6 +133,42 @@ class Guild:
         with self.lock:
             with open("guilds/{}.pickle".format(self.chat_id), "wb") as f:
                 pickle.dump(self, f)
+
+    def fort_mark(self, tg_id, handle, label=""):
+        with self.lock:
+            ensure_attribute_exists(self.fort, "attendance", [])
+            p = ExpeditionMember(tg_id, handle, label)
+            print(p)
+            print(self.fort.attendance)
+            if p in self.fort.attendance:
+                raise FortAttendanceExistsError
+            self.fort.attendance.append(p)
+
+    def fort_unmark(self, tg_id, handle, label=""):
+        ensure_attribute_exists(self.fort, "attendance", [])
+        p = ExpeditionMember(tg_id, handle, label)
+        if p not in self.fort.attendance:
+            raise FortAttendanceNotFoundError
+        self.fort.attendance.remove(p)
+
+    def update_fort_history(self):
+        with self.lock:
+            print("doing this")
+            ensure_attribute_exists(self.fort, "history", {})
+            ensure_attribute_exists(self.fort, "attendance", [])
+            for p in self.fort.attendance:
+                count = self.fort.history.get(p, 0)
+                self.fort.history[p] = count + 1
+            self.fort.attendance = []
+
+    def get_history_of(self, tg_id, handle, label=""):
+        if not hasattr(self.fort, 'history') or self.fort.history is None:  # For backward compatibility
+            self.fort.history = {}
+        p = ExpeditionMember(tg_id, handle, label)
+        try:
+            return self.fort.history[p]
+        except KeyError:
+            raise FortAttendanceNotFoundError
 
     @staticmethod
     def load(filename):
