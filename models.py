@@ -120,10 +120,10 @@ class Guild:
     def checkin_expedition(self, title, tg_id, handle, label=""):
         with self.lock:
             e = self.get_expedition(title)
-            if len(e.members) >= 10:
-                raise ExpeditionFullError
             p = ExpeditionMember(tg_id, handle, label)
             if p not in e.members:
+                if len(e.members) >= 10:
+                    raise ExpeditionFullError
                 e.members.append(p)
                 return e, p
             else:
@@ -131,14 +131,11 @@ class Guild:
 
     def checkout_expedition(self, title, tg_id, handle, label=""):
         with self.lock:
-            try:
-                e = self.expeditions[title]
-            except KeyError:
-                raise ExpeditionNotFoundError
+            e = self.get_expedition(title)
             p = ExpeditionMember(tg_id, handle, label)
             if p in e.members:
                 e.members.remove(p)
-                return self.expeditions[title], p
+                return e, p
             else:
                 raise ExpedMemberNotFound
 

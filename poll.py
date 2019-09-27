@@ -73,61 +73,64 @@ def render_poll_markup(guild):
     expeds = list(guild.expeditions.values())
     expeds.sort(key=lambda x: x.time)
     for e in expeds:
-        markup.add(types.InlineKeyboardButton(e.title, callback_data="expedition:{}".format(e.title)))
+        markup.add(types.InlineKeyboardButton(e.title, callback_data="/exped reg {}".format(e.title)))
     return markup
 
 
 ################################
 #       Middleware             #
 ################################
-def handle_command(commands, message, doc):
+def _update_pinned_msg(guild):
+    if guild.pinned_message_id is not None:
+        bot.edit_message_text(render_guild_admin(guild),
+                              chat_id=guild.chat_id,
+                              message_id=guild.pinned_message_id,
+                              parse_mode="Markdown",
+                              reply_markup=render_poll_markup(guild))
+
+
+def process_command(commands, message, doc):
     try:
         guild = guilds.get(message.chat.id)
         parts = message.text.split(' ')
         if len(parts) >= 2 and parts[1] in commands:
             command_str = parts[1]
-            result = commands[command_str](message)
-            bot.send_message(message.chat.id, result, parse_mode="Markdown")
-            if guild.pinned_message_id is not None:
-                bot.edit_message_text(render_guild_admin(guild),
-                                      chat_id=message.chat.id,
-                                      message_id=guild.pinned_message_id,
-                                      parse_mode="Markdown",
-                                      reply_markup=render_poll_markup(guild))
+            answer_text = commands[command_str](message)
+            _update_pinned_msg(guild)
             guilds.save()
         else:
             raise WrongCommandError(doc)
     except Exception as e:
         if issubclass(type(e), GuildError):
-            bot.send_message(message.chat.id, e.message)
+            answer_text = e.message
         else:
-            raise e
+            logging.error(e)
+            answer_text = "Unknown error"
+    return answer_text
+
+
+def handle_command(commands, message, doc):
+    answer_text = process_command(commands, message, doc)
+    bot.send_message(message.chat.id, answer_text, parse_mode="Markdown")
+
+
+def handle_callback(commands, call):
+    # monkey patch message data to format of text commands
+    call.message.text = call.data
+    call.message.from_user = call.from_user
+    answer_text = process_command(commands, call.message, "Command received: {}".format(call.data))
+    bot.answer_callback_query(call.id, text=answer_text)
 
 
 ################################
 #       Callback Handlers      #
 ################################
-@bot.callback_query_handler(func=lambda c: c.data.startswith("expedition:"))
-def exped_cb_handle(call):
-    # monkey patch message data to format of checkin/checkout message with expedition title only
-    call.message.text = "_ _ {}".format(call.data[len("expedition:"):])
-    call.message.from_user = call.from_user
-    try:
-        answer_text = exped_reg(call.message)
-    except Exception as e:
-        if issubclass(type(e), GuildError):
-            answer_text = e.message
-        else:
-            raise e
-    guild = guilds.get(call.message.chat.id)
-    if guild.pinned_message_id is not None:
-        bot.edit_message_text(render_guild_admin(guild),
-                              chat_id=call.message.chat.id,
-                              message_id=guild.pinned_message_id,
-                              parse_mode="Markdown",
-                              reply_markup=render_poll_markup(guild))
-    bot.answer_callback_query(call.id, text=answer_text)
-    guilds.save()
+@bot.callback_query_handler(func=lambda c: True)
+def cb_query_handler(call):
+    cb_handlers = {
+        'reg': exped_reg,
+    }
+    handle_callback(cb_handlers, call)
 
 
 ################################
@@ -218,18 +221,16 @@ def exped_view(message):
     return render_expeditions(guild)
 
 
-exped_commands = {
-    'reg': exped_reg,
-    'new': exped_new,
-    'delete': exped_delete,
-    'time': exped_time,
-    'view': exped_view
-}
-
-
 @bot.edited_message_handler(commands=['exped'])
 @bot.message_handler(commands=['exped'])
 def exped(message):
+    exped_commands = {
+        'reg': exped_reg,
+        'new': exped_new,
+        'delete': exped_delete,
+        'time': exped_time,
+        'view': exped_view
+    }
     doc = """
 /exped command [arguments...]
 Available commands are : {}
@@ -255,14 +256,12 @@ def guild_pin(message):
     _guild_pin(message.chat.id)
 
 
-admin_commands = {
-    "pin": guild_pin,
-}
-
-
 @bot.edited_message_handler(commands=['admin'])
 @bot.message_handler(commands=['admin'])
 def admin(message):
+    admin_commands = {
+        "pin": guild_pin,
+    }
     doc = """
 /admin command [arguments...]
 Available commands are : {}
