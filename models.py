@@ -61,6 +61,7 @@ class Guild:
         self.chat_id = None
         self.lock = Lock()
         self.daily_reset_time = 3
+        self.stopped = False
 
     # Members
     # TODO
@@ -129,31 +130,36 @@ class Guild:
             for e in self.expeditions:
                 self.expeditions[e].members = []
 
-    def save(self):
-        with self.lock:
-            with open("guilds/{}.pickle".format(self.chat_id), "wb") as f:
-                pickle.dump(self, f)
+    # def save(self):
+    #     with self.lock:
+    #         with open("guilds/{}.pickle".format(self.chat_id), "wb") as f:
+    #             pickle.dump(self, f)
 
     def fort_mark(self, tg_id, handle, label=""):
         with self.lock:
             ensure_attribute_exists(self.fort, "attendance", [])
             p = ExpeditionMember(tg_id, handle, label)
-            print(p)
-            print(self.fort.attendance)
             if p in self.fort.attendance:
                 raise FortAttendanceExistsError
             self.fort.attendance.append(p)
 
     def fort_unmark(self, tg_id, handle, label=""):
+        with self.lock:
+            ensure_attribute_exists(self.fort, "attendance", [])
+            p = ExpeditionMember(tg_id, handle, label)
+            if p not in self.fort.attendance:
+                raise FortAttendanceNotFoundError
+            self.fort.attendance.remove(p)
+
+    def get_attendance_today(self, tg_id, handle, label=""):
         ensure_attribute_exists(self.fort, "attendance", [])
         p = ExpeditionMember(tg_id, handle, label)
-        if p not in self.fort.attendance:
-            raise FortAttendanceNotFoundError
-        self.fort.attendance.remove(p)
+        if p in self.fort.attendance:
+            return True
+        return False
 
     def update_fort_history(self):
         with self.lock:
-            print("doing this")
             ensure_attribute_exists(self.fort, "history", {})
             ensure_attribute_exists(self.fort, "attendance", [])
             for p in self.fort.attendance:
@@ -170,10 +176,10 @@ class Guild:
         except KeyError:
             raise FortAttendanceNotFoundError
 
-    @staticmethod
-    def load(filename):
-        with open(filename, "rb") as f:
-            return pickle.load(f)
+    # @staticmethod
+    # def load(filename):
+    #     with open(filename, "rb") as f:
+    #         return pickle.load(f)
 
     def __getstate__(self):
         state = self.__dict__.copy()

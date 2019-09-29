@@ -1,7 +1,7 @@
 import telebot
-from telebot import types
+from telebot import types, apihelper
 import models as m
-import datetime
+import datetime as dt
 import threading
 import time
 from custom_errors import *
@@ -37,7 +37,7 @@ Delete expedition
 
 def render_expedition(expedition):
     msg = "⚔️ {}    🕑 {}    👥 {}\n".format(expedition.title,
-                                             datetime.time.strftime(expedition.time, "%H%M"),
+                                             render_human_time(expedition.time),
                                              len(expedition.members))
     if len(expedition.description) > 0:
         msg += "📋 {}\n".format(expedition.description)
@@ -47,10 +47,18 @@ def render_expedition(expedition):
     return msg + "\n"
 
 
+def sort_and_filter_expeditions(guild):
+    expeds = list(guild.expeditions.values())
+    expeds.sort(key=lambda x: time_shifted_back_hours(x.time, guild.daily_reset_time))
+    now = get_singapore_time_now()
+    offset = guild.daily_reset_time
+    expeds = [e for e in expeds if time_shifted_back_hours(e.time, offset) > time_shifted_back_hours(now.time(), offset)]
+    return expeds
+
+
 def render_expeditions(guild):
     msg = ""
-    expeds = list(guild.expeditions.values())
-    expeds.sort(key=lambda x: x.time)
+    expeds = sort_and_filter_expeditions(guild)
     for e in expeds:
         msg += render_expedition(e)
     if len(expeds) is 0:
@@ -59,7 +67,7 @@ def render_expeditions(guild):
 
 
 def render_guild_admin(guild):
-    current_day = datetime.datetime.now().date()
+    current_day = dt.datetime.now().date()
     guild_msg = "Guild Admin {}/{}\n\n".format(current_day.month, current_day.day)
     guild_msg += render_expeditions(guild)
     guild_msg += "\n"
@@ -69,16 +77,31 @@ def render_guild_admin(guild):
 
 def render_poll_markup(guild):
     markup = types.InlineKeyboardMarkup()
-    # Render exped polls
-    expeds = list(guild.expeditions.values())
-    expeds.sort(key=lambda x: x.time)
+    expeds = sort_and_filter_expeditions(guild)
     for e in expeds:
-        markup.add(types.InlineKeyboardButton("{} ({})".format(e.title, e.time.strftime("%H%M")),
+        markup.add(types.InlineKeyboardButton("Join {} ({})".format(e.title, render_human_time(e.time)),
                                               callback_data="/exped reg {}".format(e.title)))
     # Render fort attendance poll
-    markup.add(types.InlineKeyboardButton("Attended fort today",
-                                          callback_data="/fort mark"))
+    fort_mark_button = types.InlineKeyboardButton("Attended fort today",
+                                                  callback_data="/fort mark")
+    fort_check_button = types.InlineKeyboardButton("Check fort count",
+                                                   callback_data="/fort check")
+    markup.row(fort_mark_button, fort_check_button)
     return markup
+
+
+def render_human_time(time_obj):
+    if time_obj.minute > 0:
+        return time_obj.strftime("%I.%M%p").lstrip("0").lower()
+    else:
+        return time_obj.strftime("%I%p").lstrip("0").lower()
+
+
+def time_shifted_back_hours(t, hour_offset):
+    new_hour = t.hour - hour_offset
+    if new_hour < 0:
+        new_hour = 24 + new_hour
+    return t.replace(hour=new_hour)
 
 
 ################################
@@ -134,6 +157,7 @@ def cb_query_handler(call):
     cb_handlers = {
         'reg': exped_reg,
         'mark': fort_mark,
+        'check': fort_check,
     }
     handle_callback(cb_handlers, call)
 
@@ -288,11 +312,12 @@ def fort_check(message):
     handle = message.from_user.first_name
     handle_id = message.from_user.id
 
+    today = int(guild.get_attendance_today(handle_id, handle, label))
     try:
         result = guild.get_history_of(handle_id, handle, label)
-        return "Attendance for {}: {}".format(handle, result)
     except FortAttendanceNotFoundError:
-        return "Attendance not found for {}".format(handle)
+        result = 0
+    return "Fort count for {}: {}".format(handle, result + today)
 
 
 @bot.edited_message_handler(commands=['fort'])
@@ -319,6 +344,11 @@ def _guild_pin(chat_id):
                             guild_msg,
                             parse_mode="Markdown",
                             reply_markup=render_poll_markup(guild)).wait()
+
+    if type(sent) is tuple:
+        if "blocked" in sent[1].result.text:
+            _guild_stop(chat_id)
+            return
     guild.pinned_message_id = sent.message_id
     bot.pin_chat_message(guild.chat_id, guild.pinned_message_id)
 
@@ -340,18 +370,35 @@ Available commands are : {}
     handle_command(admin_commands, message, doc)
 
 
+def _guild_stop(chat_id):
+    g = guilds.get(chat_id)
+    setattr(g, "stopped", True)
+
+
+@bot.message_handler(commands=['stop'])
+def stop(message):
+    try:
+        _guild_stop(message.chat.id)
+        bot.send_message(message.chat.id, "Guild bot stopped.")
+        guilds.save()
+    except KeyError:
+        pass
+
+
 @bot.message_handler(commands=['start'])
 def start(message):
     try:
-        guilds.get(message.chat.id)
+        g = guilds.get(message.chat.id)
+        setattr(g, "stopped", False)
         bot.send_message(message.chat.id, "Guild bot ready.")
     except GuildNotFoundError:
         guild = m.Guild()
         guilds.set(message.chat.id, guild)
         guild.chat_id = message.chat.id
         guild.title = message.chat.title
-        guilds.save()
         bot.send_message(message.chat.id, "Guild bot initialized.")
+    finally:
+        guilds.save()
 
 
 @bot.message_handler(commands=['reset_guild'])
@@ -361,7 +408,7 @@ def reset(message):
 
 
 def get_singapore_time_now():
-    now = datetime.datetime.utcnow()
+    now = dt.datetime.utcnow()
     offset = __tz__.utcoffset(now)
     return now + offset
 
@@ -384,8 +431,10 @@ class GuildAutomation(object):
     def exped_reminder(self):
         while True:
             now = get_singapore_time_now()
-            two_mins = now + datetime.timedelta(minutes=2)
+            two_mins = now + dt.timedelta(minutes=2)
             for guild in guilds.values():
+                if getattr(guild, "stopped", False):
+                    continue
                 for e in guild.expeditions.values():
                     if equal_hour_minute(e.time, two_mins):
                         bot.send_message(guild.chat_id,
@@ -397,6 +446,8 @@ class GuildAutomation(object):
         while True:
             now = get_singapore_time_now()
             for guild in guilds.values():
+                if getattr(guild, "stopped", False):
+                    continue
                 if now.hour == guild.daily_reset_time or True:
                     guild.reset_expeditions()
                     guild.update_fort_history()
