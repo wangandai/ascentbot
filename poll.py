@@ -448,7 +448,7 @@ class GuildAutomation(object):
             for guild in guilds.values():
                 if getattr(guild, "stopped", False):
                     continue
-                if now.hour == guild.daily_reset_time or True:
+                if now.hour == guild.daily_reset_time:
                     guild.reset_expeditions()
                     guild.update_fort_history()
                     _guild_pin(guild.chat_id)
