@@ -200,9 +200,13 @@ class Guilds:
     def __init__(self):
         self.guilds = {}
 
-    def get(self, guild_chat_id):
+    def get(self, guild_chat_id, ignore_stopped=False):
         try:
-            return self.guilds[guild_chat_id]
+            g = self.guilds[guild_chat_id]
+            if g.stopped and not ignore_stopped:
+                raise GuildNotFoundError
+            else:
+                return self.guilds[guild_chat_id]
         except KeyError:
             raise GuildNotFoundError
 
@@ -225,3 +229,9 @@ class Guilds:
         if g is not None:
             _g.__dict__.update(g.__dict__)
         return _g
+
+
+class MessageReply:
+    def __init__(self, message, temporary=True):
+        self.message = message
+        self.temporary = temporary  # Marks reply as temporary and should be deleted to reduce clutter

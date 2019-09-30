@@ -1,5 +1,5 @@
 import telebot
-from telebot import types, apihelper
+from telebot import types
 import models as m
 import datetime as dt
 import threading
@@ -51,14 +51,18 @@ def sort_and_filter_expeditions(guild):
     expeds = list(guild.expeditions.values())
     expeds.sort(key=lambda x: time_shifted_back_hours(x.time, guild.daily_reset_time))
     now = get_singapore_time_now()
+    two_h_before = (now - dt.timedelta(hours=2)).time()
     offset = guild.daily_reset_time
-    expeds = [e for e in expeds if time_shifted_back_hours(e.time, offset) > time_shifted_back_hours(now.time(), offset)]
+    expeds = [e for e in expeds if time_shifted_back_hours(e.time, offset) > time_shifted_back_hours(two_h_before, offset)]
     return expeds
 
 
-def render_expeditions(guild):
+def render_expeditions(guild, filter=True):
     msg = ""
-    expeds = sort_and_filter_expeditions(guild)
+    if filter:
+        expeds = sort_and_filter_expeditions(guild)
+    else:
+        expeds = list(guild.expeditions.values())
     for e in expeds:
         msg += render_expedition(e)
     if len(expeds) is 0:
@@ -82,9 +86,9 @@ def render_poll_markup(guild):
         markup.add(types.InlineKeyboardButton("Join {} ({})".format(e.title, render_human_time(e.time)),
                                               callback_data="/exped reg {}".format(e.title)))
     # Render fort attendance poll
-    fort_mark_button = types.InlineKeyboardButton("Attended fort today",
+    fort_mark_button = types.InlineKeyboardButton("Went fort today",
                                                   callback_data="/fort mark")
-    fort_check_button = types.InlineKeyboardButton("Check fort count",
+    fort_check_button = types.InlineKeyboardButton("My fort count",
                                                    callback_data="/fort check")
     markup.row(fort_mark_button, fort_check_button)
     return markup
@@ -122,23 +126,29 @@ def process_command(commands, message, doc):
         parts = message.text.split(' ')
         if len(parts) >= 2 and parts[1] in commands:
             command_str = parts[1]
-            answer_text = commands[command_str](message)
+            answer = commands[command_str](message)
             _update_pinned_msg(guild)
             guilds.save()
         else:
             raise WrongCommandError(doc)
     except Exception as e:
         if issubclass(type(e), GuildError):
-            answer_text = e.message
+            answer = m.MessageReply(e.message)
         else:
             logging.error(e)
-            answer_text = "Unknown error"
-    return answer_text
+            answer = m.MessageReply("Unknown error")
+    return answer
 
 
 def handle_command(commands, message, doc):
-    answer_text = process_command(commands, message, doc)
-    bot.send_message(message.chat.id, answer_text, parse_mode="Markdown")
+    answer = process_command(commands, message, doc)
+    if answer is not None and len(answer.message) > 0:
+        sent = (bot.send_message(message.chat.id, answer.message,
+                                 parse_mode="Markdown",
+                                 disable_notification=True
+                                 )).wait()
+        if answer.temporary:
+            delete_command_and_reply(message, sent)
 
 
 def handle_callback(commands, call):
@@ -147,6 +157,18 @@ def handle_callback(commands, call):
     call.message.from_user = call.from_user
     answer_text = process_command(commands, call.message, "Command received: {}".format(call.data))
     bot.answer_callback_query(call.id, text=answer_text)
+
+
+def delete_command_and_reply(message, reply):
+    def _delete_messages(msg, rep):
+        if type(rep) is tuple:
+            logging.error("Could not delete reply: {}".format(reply[1]))
+            return
+        time.sleep(5)
+        bot.delete_message(msg.chat.id, msg.message_id)
+        bot.delete_message(msg.chat.id, reply.message_id)
+    del_task = threading.Thread(target=_delete_messages, args=(message, reply), daemon=True)
+    del_task.start()
 
 
 ################################
@@ -183,7 +205,7 @@ def exped_new(message):
     try:
         guild = guilds.get(message.chat.id)
         e = guild.new_expedition(title, time, description)
-        return "Expedition created: {} {}".format(e.title, time)
+        return m.MessageReply("Expedition created: {} {}".format(e.title, time))
     except ValueError:
         raise WrongCommandError(doc)
 
@@ -198,7 +220,7 @@ def exped_time(message):
     try:
         guild = guilds.get(message.chat.id)
         e = guild.set_expedition_time(parts[2], parts[3])
-        return "{} updated to {}".format(e.title, parts[3])
+        return m.MessageReply("{} updated to {}".format(e.title, parts[3]))
     except ValueError:
         raise WrongCommandError(doc)
 
@@ -211,7 +233,7 @@ def exped_delete(message):
     if len(parts) == 3:
         guild = guilds.get(message.chat.id)
         guild.delete_expedition(parts[2])
-        return "{} deleted.".format(parts[2])
+        return m.MessageReply("{} deleted.".format(parts[2]))
     else:
         raise WrongCommandError(doc)
 
@@ -236,10 +258,11 @@ def exped_reg(message):
 
     try:
         e, member = guild.checkin_expedition(title, handle_id, handle, label)
-        return "{} checked in to {}".format(member.tg_handle, e.title)
+        answer_text = "{} checked in to {}".format(member.tg_handle, e.title)
     except ExpedMemberAlreadyExists:
         e, member = guild.checkout_expedition(title, handle_id, handle, label)
-        return "{} checked out of {}".format(member.tg_handle, e.title)
+        answer_text = "{} checked out of {}".format(member.tg_handle, e.title)
+    return m.MessageReply(answer_text)
 
 
 def exped_view(message):
@@ -247,7 +270,7 @@ def exped_view(message):
 /exped view
     """
     guild = guilds.get(message.chat.id)
-    return render_expeditions(guild)
+    return m.MessageReply(render_expeditions(guild, filter=False), temporary=False)
 
 
 @bot.edited_message_handler(commands=['exped'])
@@ -289,10 +312,11 @@ def fort_mark(message):
 
     try:
         guild.fort_mark(handle_id, handle, label)
-        return "Attendance added for {}".format(handle)
+        answer_text = "Attendance added for {}".format(handle)
     except FortAttendanceExistsError:
         guild.fort_unmark(handle_id, handle, label)
-        return "Attendance removed for {}".format(handle)
+        answer_text = "Attendance removed for {}".format(handle)
+    return m.MessageReply(answer_text)
 
 
 def fort_check(message):
@@ -317,7 +341,7 @@ def fort_check(message):
         result = guild.get_history_of(handle_id, handle, label)
     except FortAttendanceNotFoundError:
         result = 0
-    return "Fort count for {}: {}".format(handle, result + today)
+    return m.MessageReply("Fort count for {}: {}".format(handle, result + today))
 
 
 @bot.edited_message_handler(commands=['fort'])
@@ -343,18 +367,20 @@ def _guild_pin(chat_id):
     sent = bot.send_message(guild.chat_id,
                             guild_msg,
                             parse_mode="Markdown",
-                            reply_markup=render_poll_markup(guild)).wait()
+                            reply_markup=render_poll_markup(guild),
+                            disable_notification=True).wait()
 
     if type(sent) is tuple:
         if "blocked" in sent[1].result.text:
             _guild_stop(chat_id)
-            return
-    guild.pinned_message_id = sent.message_id
-    bot.pin_chat_message(guild.chat_id, guild.pinned_message_id)
+    else:
+        guild.pinned_message_id = sent.message_id
+        bot.pin_chat_message(guild.chat_id, guild.pinned_message_id)
+    return None
 
 
 def guild_pin(message):
-    _guild_pin(message.chat.id)
+    return _guild_pin(message.chat.id)
 
 
 @bot.edited_message_handler(commands=['admin'])
@@ -381,14 +407,14 @@ def stop(message):
         _guild_stop(message.chat.id)
         bot.send_message(message.chat.id, "Guild bot stopped.")
         guilds.save()
-    except KeyError:
-        pass
+    except GuildNotFoundError:
+        bot.send_message(message.chat.id, "Guild bot already stopped.")
 
 
 @bot.message_handler(commands=['start'])
 def start(message):
     try:
-        g = guilds.get(message.chat.id)
+        g = guilds.get(message.chat.id, ignore_stopped=True)
         setattr(g, "stopped", False)
         bot.send_message(message.chat.id, "Guild bot ready.")
     except GuildNotFoundError:
