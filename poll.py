@@ -47,22 +47,25 @@ def render_expedition(expedition):
     return msg + "\n"
 
 
-def sort_and_filter_expeditions(guild):
-    expeds = list(guild.expeditions.values())
-    expeds.sort(key=lambda x: time_shifted_back_hours(x.time, guild.daily_reset_time))
+def sort_expeditions(expeds, daily_reset_time=0):
+    return sorted(expeds, key=lambda x: time_shifted_back_hours(x.time, daily_reset_time))
+
+
+def filter_expeditions(expeds, daily_reset_time=0):
     now = get_singapore_time_now()
     two_h_before = (now - dt.timedelta(hours=2)).time()
-    offset = guild.daily_reset_time
-    expeds = [e for e in expeds if time_shifted_back_hours(e.time, offset) > time_shifted_back_hours(two_h_before, offset)]
+    offset = daily_reset_time
+    expeds = [e for e in expeds if
+              time_shifted_back_hours(e.time, offset) > time_shifted_back_hours(two_h_before, offset)]
     return expeds
 
 
-def render_expeditions(guild, filter=True):
+def render_expeditions(expeds, guild_reset_time=0, sort=True, filter=True):
     msg = ""
+    if sort:
+        expeds = sort_expeditions(expeds, guild_reset_time)
     if filter:
-        expeds = sort_and_filter_expeditions(guild)
-    else:
-        expeds = list(guild.expeditions.values())
+        expeds = filter_expeditions(expeds, guild_reset_time)
     for e in expeds:
         msg += render_expedition(e)
     if len(expeds) is 0:
@@ -72,8 +75,9 @@ def render_expeditions(guild, filter=True):
 
 def render_guild_admin(guild):
     current_day = dt.datetime.now().date()
+    expeds = list(guild.expeditions.values())
     guild_msg = "Guild Admin {}/{}\n\n".format(current_day.month, current_day.day)
-    guild_msg += render_expeditions(guild)
+    guild_msg += render_expeditions(expeds, guild_reset_time=guild.daily_reset_time)
     guild_msg += "\n"
     guild_msg += render_adv_text()
     return guild_msg
@@ -81,7 +85,9 @@ def render_guild_admin(guild):
 
 def render_poll_markup(guild):
     markup = types.InlineKeyboardMarkup()
-    expeds = sort_and_filter_expeditions(guild)
+    expeds = list(guild.expeditions.values())
+    expeds = sort_expeditions(expeds, guild.daily_reset_time)
+    expeds = filter_expeditions(expeds, guild.daily_reset_time)
     for e in expeds:
         markup.add(types.InlineKeyboardButton("Join {} ({})".format(e.title, render_human_time(e.time)),
                                               callback_data="/exped reg {}".format(e.title)))
@@ -135,7 +141,7 @@ def process_command(commands, message, doc):
         if issubclass(type(e), GuildError):
             answer = m.MessageReply(e.message)
         else:
-            logging.error(e)
+            logging.exception(e)
             answer = m.MessageReply("Unknown error")
     return answer
 
@@ -270,7 +276,11 @@ def exped_view(message):
 /exped view
     """
     guild = guilds.get(message.chat.id)
-    return m.MessageReply(render_expeditions(guild, filter=False), temporary=False)
+    expeds = list(guild.expeditions.values())
+    return m.MessageReply(render_expeditions(expeds,
+                                             guild_reset_time=guild.daily_reset_time,
+                                             filter=False),
+                          temporary=False)
 
 
 @bot.edited_message_handler(commands=['exped'])
