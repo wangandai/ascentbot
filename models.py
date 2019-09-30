@@ -203,6 +203,7 @@ class Guilds:
     def get(self, guild_chat_id, ignore_stopped=False):
         try:
             g = self.guilds[guild_chat_id]
+            ensure_attribute_exists(g, "stopped", False)
             if g.stopped and not ignore_stopped:
                 raise GuildNotFoundError
             else:

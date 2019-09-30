@@ -161,8 +161,8 @@ def handle_callback(commands, call):
     # monkey patch message data to format of text commands
     call.message.text = call.data
     call.message.from_user = call.from_user
-    answer_text = process_command(commands, call.message, "Command received: {}".format(call.data))
-    bot.answer_callback_query(call.id, text=answer_text)
+    answer = process_command(commands, call.message, "Command received: {}".format(call.data))
+    bot.answer_callback_query(call.id, text=answer.message)
 
 
 def delete_command_and_reply(message, reply):
