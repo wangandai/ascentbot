@@ -168,13 +168,25 @@ class Guild:
             self.fort.attendance = []
 
     def get_history_of(self, tg_id, handle, label=""):
-        if not hasattr(self.fort, 'history') or self.fort.history is None:  # For backward compatibility
-            self.fort.history = {}
+        ensure_attribute_exists(self.fort, "history", {})
         p = ExpeditionMember(tg_id, handle, label)
         try:
             return self.fort.history[p]
         except KeyError:
             raise FortAttendanceNotFoundError
+
+    def reset_fort_history(self):
+        self.fort = Fort()
+
+    def get_history_all(self):
+        ensure_attribute_exists(self.fort, "history", {})
+        ensure_attribute_exists(self.fort, "attendance", [])
+        combined = {}
+        for p in self.fort.attendance:
+            combined[p] = 1
+        for p in self.fort.history:
+            combined[p] = self.fort.history.get(p, 0) + combined.get(p, 0)
+        return combined
 
     # @staticmethod
     # def load(filename):

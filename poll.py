@@ -354,12 +354,38 @@ def fort_check(message):
     return m.MessageReply("Fort count for {}: {}".format(handle, result + today))
 
 
+def fort_reset_history(message):
+    doc = """Possible messages:
+/fort reset_history
+    """
+    guild = guilds.get(message.chat.id)
+    guild.reset_fort_history()
+    guilds.save()
+    return m.MessageReply("Fort history reset.", temporary=False)
+
+
+def fort_get_history(message):
+    doc = """Possible messages:
+/fort get_history
+    """
+    guild = guilds.get(message.chat.id)
+    history = guild.get_history_all()
+    current_day = dt.datetime.now().date()
+    msg = "*Fort history {}/{}*\n".format(current_day.month, current_day.day)
+    for p in history:
+        msg += "{} : {}\n".format(p.tg_handle, history[p])
+    msg += "\nIf your name is not here, your recorded count is 0."
+    return m.MessageReply(msg, temporary=False)
+
+
 @bot.edited_message_handler(commands=['fort'])
 @bot.message_handler(commands=['fort'])
 def fort(message):
     fort_commands = {
         'mark': fort_mark,
         'check': fort_check,
+        'reset_history': fort_reset_history,
+        'get_history': fort_get_history,
     }
     doc = """
 /fort command [arguments...]
