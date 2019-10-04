@@ -53,6 +53,8 @@ def sort_expeditions(expeds, daily_reset_time=0):
 
 def filter_expeditions(expeds, daily_reset_time=0):
     now = get_singapore_time_now()
+    if 0 <= now.time().hour - daily_reset_time <= 2:  # if current time is within 2 hours after daily reset time, dont filter
+        return expeds
     two_h_before = (now - dt.timedelta(hours=2)).time()
     offset = daily_reset_time
     expeds = [e for e in expeds if
