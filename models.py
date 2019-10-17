@@ -1,39 +1,38 @@
 from datetime import datetime
 from custom_errors import *
-import pickle
 from threading import Lock
-import storage
+import database
 import os
-
-storage = storage.Storage()
-
-
-def ensure_attribute_exists(obj, attr, default):
-    if not hasattr(obj, attr) or getattr(obj, attr) is None:  # For backward compatibility
-        setattr(obj, attr, default)
+import json
 
 
-# TODO: Change name to "Player"
-class ExpeditionMember:
-    def __init__(self, tg_id, handle, label=""):
-        self.tg_handle = handle
+class Player:
+    def __init__(self, tg_id: str = "", tg_handle: str = "", label: str = ""):
+        self.tg_handle = tg_handle
         self.tg_id = tg_id
         self.label = label
 
     def __eq__(self, other):
-        if type(other) is not ExpeditionMember:
+        if type(other) is not Player:
             return False
-        return self.tg_id == other.tg_id and self.label.lower() == other.label.lower()
+        return self.__str__() == other.__str__()
 
     def __hash__(self):
-        return hash("{}_{}".format(self.tg_id, self.label.lower()))
+        return hash(self.__str__())
+
+    def __str__(self):
+        return json.dumps(self.__dict__, sort_keys=True)
+
+    @classmethod
+    def from_json(cls, data):
+        return cls(**data)
 
 
 class Expedition:
-    def __init__(self, title, time, description=""):
-        self.time = datetime.strptime(time, "%H%M").time()
+    def __init__(self, title: str = "", time: str = "1200", description: str = "", members: list = None):
+        self.time = time
         self.title = title
-        self.members = []
+        self.members = members or []
         self.description = description
 
     def set_time(self, time_string):
@@ -42,29 +41,53 @@ class Expedition:
     def set_description(self, description):
         self.description = description
 
+    def get_time(self):
+        return datetime.strptime(self.time, "%H%M").time()
+
+    @classmethod
+    def from_json(cls, data):
+        data["members"] = [Player.from_json(m) for m in data["members"]]
+        return cls(**data)
+
 
 class Fort:
-    def __init__(self):
-        self.reminder_time = None
-        self.roster = []
-        self.attendance = []
-        self.history = {}
+    def __init__(self, roster: list = None, attendance: list = None, history: dict = None):
+        self.roster = roster or []
+        self.attendance = attendance or []
+        self.history = history or {}
+
+    @classmethod
+    def from_json(cls, data):
+        data["attendance"] = [Player.from_json(e) for e in data["attendance"]]
+        return cls(**data)
 
 
 class Guild:
-    def __init__(self):
-        self.title = ""
-        self.members = []
-        self.expeditions = {}
-        self.fort = Fort()
-        self.pinned_message_id = None
-        self.chat_id = None
+    def __init__(self, title: str = "",
+                 members: list = None,
+                 expeditions: dict = None,
+                 fort: Fort = None,
+                 pinned_message_id: int = None,
+                 chat_id: int = None,
+                 daily_reset_time: int = 3,
+                 stopped: bool = False):
+        self.title = title
+        self.members = members or []
+        self.expeditions = expeditions or {}
+        self.fort = fort or Fort()
+        self.pinned_message_id = pinned_message_id or None
+        self.chat_id = chat_id or None
         self.lock = Lock()
-        self.daily_reset_time = 3
-        self.stopped = False
+        self.daily_reset_time = daily_reset_time
+        self.stopped = stopped
 
-    # Members
-    # TODO
+    @classmethod
+    def from_json(cls, data):
+        data.pop("lock", None)
+        data["fort"] = Fort.from_json(data["fort"])
+        data["expeditions"] = {t: Expedition.from_json(e) for (t, e) in data["expeditions"].items()}
+        # TODO: Members
+        return cls(**data)
 
     # Expeditions
     def new_expedition(self, title, time, description=""):
@@ -102,7 +125,7 @@ class Guild:
     def checkin_expedition(self, title, tg_id, handle, label=""):
         with self.lock:
             e = self.get_expedition(title)
-            p = ExpeditionMember(tg_id, handle, label)
+            p = Player(tg_id, handle, label)
             if p not in e.members:
                 if len(e.members) >= 10:
                     raise ExpeditionFullError
@@ -114,7 +137,7 @@ class Guild:
     def checkout_expedition(self, title, tg_id, handle, label=""):
         with self.lock:
             e = self.get_expedition(title)
-            p = ExpeditionMember(tg_id, handle, label)
+            p = Player(tg_id, handle, label)
             if p in e.members:
                 e.members.remove(p)
                 return e, p
@@ -130,48 +153,39 @@ class Guild:
             for e in self.expeditions:
                 self.expeditions[e].members = []
 
-    # def save(self):
-    #     with self.lock:
-    #         with open("guilds/{}.pickle".format(self.chat_id), "wb") as f:
-    #             pickle.dump(self, f)
-
     def fort_mark(self, tg_id, handle, label=""):
         with self.lock:
-            ensure_attribute_exists(self.fort, "attendance", [])
-            p = ExpeditionMember(tg_id, handle, label)
+            p = Player(tg_id, handle, label)
             if p in self.fort.attendance:
                 raise FortAttendanceExistsError
             self.fort.attendance.append(p)
 
     def fort_unmark(self, tg_id, handle, label=""):
         with self.lock:
-            ensure_attribute_exists(self.fort, "attendance", [])
-            p = ExpeditionMember(tg_id, handle, label)
+            p = Player(tg_id, handle, label)
             if p not in self.fort.attendance:
                 raise FortAttendanceNotFoundError
             self.fort.attendance.remove(p)
 
     def get_attendance_today(self, tg_id, handle, label=""):
-        ensure_attribute_exists(self.fort, "attendance", [])
-        p = ExpeditionMember(tg_id, handle, label)
+        p = Player(tg_id, handle, label)
         if p in self.fort.attendance:
             return True
         return False
 
     def update_fort_history(self):
         with self.lock:
-            ensure_attribute_exists(self.fort, "history", {})
-            ensure_attribute_exists(self.fort, "attendance", [])
             for p in self.fort.attendance:
-                count = self.fort.history.get(p, 0)
-                self.fort.history[p] = count + 1
+                p_str = str(p)
+                count = self.fort.history.get(p_str, 0)
+                self.fort.history[p_str] = count + 1
             self.fort.attendance = []
 
     def get_history_of(self, tg_id, handle, label=""):
-        ensure_attribute_exists(self.fort, "history", {})
-        p = ExpeditionMember(tg_id, handle, label)
+        p = Player(tg_id, handle, label)
+        p_str = str(p)
         try:
-            return self.fort.history[p]
+            return self.fort.history[p_str]
         except KeyError:
             raise FortAttendanceNotFoundError
 
@@ -179,43 +193,29 @@ class Guild:
         self.fort = Fort()
 
     def get_history_all(self):
-        ensure_attribute_exists(self.fort, "history", {})
-        ensure_attribute_exists(self.fort, "attendance", [])
         combined = {}
         for p in self.fort.attendance:
-            combined[p] = 1
-        for p in self.fort.history:
-            combined[p] = self.fort.history.get(p, 0) + combined.get(p, 0)
+            combined[str(p)] = 1
+        for p_Str in self.fort.history:
+            combined[p_Str] = self.fort.history.get(p_Str, 0) + combined.get(p_Str, 0)
         return combined
 
-    # @staticmethod
-    # def load(filename):
-    #     with open(filename, "rb") as f:
-    #         return pickle.load(f)
-
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        del state['lock']
-        return state
-
-    def __setstate__(self, d):
-        self.__dict__.update(d)
-        self.lock = Lock()
-
-    # Fort
-    # TODO
+    def __eq__(self, other):
+        if type(other) is not Guild:
+            return False
+        return self.__dict__ == other.__dict__
 
 
 class Guilds:
-    savefile = "{}.guilds".format(os.getenv("MODE", "dev"))
+    savefile = "guilds.{}.json".format(os.getenv("MODE", "dev"))
 
-    def __init__(self):
-        self.guilds = {}
+    def __init__(self, guilds: dict = None, storage: database.Storage = None):
+        self.guilds = guilds or {}
+        self.storage = storage or database.Storage()
 
     def get(self, guild_chat_id, ignore_stopped=False):
         try:
             g = self.guilds[guild_chat_id]
-            ensure_attribute_exists(g, "stopped", False)
             if g.stopped and not ignore_stopped:
                 raise GuildNotFoundError
             else:
@@ -233,18 +233,38 @@ class Guilds:
         return self.guilds.keys()
 
     def save(self):
-        storage.savefile(self, self.savefile)
+        saveobj = self.__dict__.copy()
+        del saveobj["storage"]
+        self.storage.savefile(saveobj, self.savefile, "json")
 
     @staticmethod
-    def load():
-        _g = Guilds()
-        g = storage.loadfile(Guilds.savefile)
-        if g is not None:
-            _g.__dict__.update(g.__dict__)
+    def load(storage: database.Storage = None):
+        if storage is None:
+            storage = database.Storage()
+
+        t = storage.loadfile(Guilds.savefile, "json")
+        print(t)
+        _g = Guilds.from_json(t)
         return _g
+
+    @classmethod
+    def from_json(cls, data):
+        data.pop("storage", None)
+        data["guilds"] = {int(k): Guild.from_json(v) for k, v in data["guilds"].items()}
+        return cls(**data)
 
 
 class MessageReply:
     def __init__(self, message, temporary=True):
         self.message = message
         self.temporary = temporary  # Marks reply as temporary and should be deleted to reduce clutter
+
+
+class Command:
+    def __init__(self, message):
+        if message[0] is "/":
+            parts = message.split(" ")
+            self.cmd = parts[0]
+            self.sub_cmd = parts[1]
+            if len(parts) > 2:
+                self.args = parts[2:]

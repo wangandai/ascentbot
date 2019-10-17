@@ -37,7 +37,7 @@ Delete expedition
 
 def render_expedition(expedition):
     msg = "⚔️ {}    🕑 {}    👥 {}\n".format(expedition.title,
-                                             render_human_time(expedition.time),
+                                             render_human_time(expedition.get_time()),
                                              len(expedition.members))
     if len(expedition.description) > 0:
         msg += "📋 {}\n".format(expedition.description)
@@ -48,7 +48,7 @@ def render_expedition(expedition):
 
 
 def sort_expeditions(expeds, daily_reset_time=0):
-    return sorted(expeds, key=lambda x: time_shifted_back_hours(x.time, daily_reset_time))
+    return sorted(expeds, key=lambda x: time_shifted_back_hours(x.get_time(), daily_reset_time))
 
 
 def filter_expeditions(expeds, daily_reset_time=0):
@@ -58,7 +58,7 @@ def filter_expeditions(expeds, daily_reset_time=0):
     two_h_before = (now - dt.timedelta(hours=2)).time()
     offset = daily_reset_time
     expeds = [e for e in expeds if
-              time_shifted_back_hours(e.time, offset) > time_shifted_back_hours(two_h_before, offset)]
+              time_shifted_back_hours(e.get_time(), offset) > time_shifted_back_hours(two_h_before, offset)]
     return expeds
 
 
@@ -91,7 +91,7 @@ def render_poll_markup(guild):
     expeds = sort_expeditions(expeds, guild.daily_reset_time)
     expeds = filter_expeditions(expeds, guild.daily_reset_time)
     for e in expeds:
-        markup.add(types.InlineKeyboardButton("Join {} ({})".format(e.title, render_human_time(e.time)),
+        markup.add(types.InlineKeyboardButton("Join {} ({})".format(e.title, render_human_time(e.get_time())),
                                               callback_data="/exped reg {}".format(e.title)))
     # Render fort attendance poll
     fort_mark_button = types.InlineKeyboardButton("Went fort today",
@@ -188,6 +188,7 @@ def cb_query_handler(call):
         'reg': exped_reg,
         'mark': fort_mark,
         'check': fort_check,
+        'ready': exped_ready,
     }
     handle_callback(cb_handlers, call)
 
@@ -283,6 +284,13 @@ def exped_view(message):
                                              guild_reset_time=guild.daily_reset_time,
                                              filter=False),
                           temporary=False)
+
+def exped_ready(message):
+    doc = """
+This handles a callback from an expedition reminder, when a user pressed the I'm ready button.
+    """
+    print(message.text)
+    return m.MessageReply("You are ready!")
 
 
 @bot.edited_message_handler(commands=['exped'])
@@ -500,10 +508,19 @@ class GuildAutomation(object):
                 if getattr(guild, "stopped", False):
                     continue
                 for e in guild.expeditions.values():
-                    if equal_hour_minute(e.time, two_mins):
+                    if equal_hour_minute(e.get_time(), two_mins):
+                        # ready_markup = types.InlineKeyboardMarkup()
+                        # ready_markup.add(
+                        #     types.InlineKeyboardButton(
+                        #         "Im ready!",
+                        #         callback_data="/exped ready"
+                        #     )
+                        # )
                         bot.send_message(guild.chat_id,
                                          "Expedition Reminder:\n{}".format(render_expedition(e)),
-                                         parse_mode="Markdown")
+                                         parse_mode="Markdown",
+                                         # reply_markup=ready_markup,
+                                         )
             time.sleep(60)
 
     def daily_reset(self):
