@@ -4,4 +4,4 @@ RUN pip install -r requirements.txt
 ENV LISTEN_MODE=webhook
 ENV MODE=prd
 ENV WEBHOOK_HOST=https://msm-guild-bot.herokuapp.com
-CMD python3 poll.py
+CMD python3 main.py
