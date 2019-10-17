@@ -29,10 +29,11 @@ class Player:
 
 
 class Expedition:
-    def __init__(self, title: str = "", time: str = "1200", description: str = "", members: list = None):
+    def __init__(self, title: str = "", time: str = "1200", description: str = "", members: list = None, ready: list = None):
         self.time = time
         self.title = title
         self.members = members or []
+        self.ready = ready or []
         self.description = description
 
     def set_time(self, time_string):
@@ -47,6 +48,7 @@ class Expedition:
     @classmethod
     def from_json(cls, data):
         data["members"] = [Player.from_json(m) for m in data["members"]]
+        data["ready"] = [Player.from_json(m) for m in data["ready"]]
         return cls(**data)
 
 
@@ -143,6 +145,17 @@ class Guild:
                 return e, p
             else:
                 raise ExpedMemberNotFoundError
+
+    def ready_expedition(self, title, tg_id, handle, label=""):
+        with self.lock:
+            e = self.get_expedition(title)
+            p = Player(tg_id, handle, label)
+            if p in e.ready:
+                e.ready.remove(p)
+                return e, False
+            else:
+                e.ready.append(p)
+                return e, True
 
     def set_reset_time(self, time):
         with self.lock:
@@ -243,9 +256,10 @@ class Guilds:
             storage = database.Storage()
 
         t = storage.loadfile(Guilds.savefile, "json")
-        print(t)
-        _g = Guilds.from_json(t)
-        return _g
+        if t is None:
+            return Guilds()
+        return Guilds.from_json(t)
+
 
     @classmethod
     def from_json(cls, data):

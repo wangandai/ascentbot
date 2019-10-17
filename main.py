@@ -3,9 +3,10 @@ from telebot import types
 import models as m
 import threading
 import time
-from custom_errors import *
 import os
 import logging
+from custom_errors import *
+from renderers import *
 from util import *
 from flask import Flask, request
 from dotenv import load_dotenv
@@ -16,95 +17,6 @@ telebot.logger.setLevel(logging.INFO)
 bot = telebot.AsyncTeleBot(__token__)
 
 guilds = m.Guilds.load()
-
-
-################################
-#       Renderers              #
-################################
-def render_adv_text():
-    return """
-Advanced commands:
-Register with alt:
-/exped reg <team> <alt>
-Create new expedition
-/exped new <team> <HHMM> <description>
-Delete expedition
-/exped delete <team>
-"""
-
-
-def render_expedition(expedition):
-    msg = "⚔️ {}    🕑 {}    👥 {}\n".format(expedition.title,
-                                             render_human_time(expedition.get_time()),
-                                             len(expedition.members))
-    if len(expedition.description) > 0:
-        msg += "📋 {}\n".format(expedition.description)
-    for i, member in enumerate(expedition.members):
-        msg += "{}. [{}](tg://user?id={}) {}\n".format(i + 1, member.tg_handle, member.tg_id,
-                                                       member.label if member.label is not None else "")
-    return msg + "\n"
-
-
-def sort_expeditions(expeds, daily_reset_time=0):
-    return sorted(expeds, key=lambda x: time_shifted_back_hours(x.get_time(), daily_reset_time))
-
-
-def filter_expeditions(expeds, daily_reset_time=0):
-    now = get_singapore_time_now()
-    if 0 <= now.time().hour - daily_reset_time <= 2:  # if current time is within 2 hours after daily reset time, dont filter
-        return expeds
-    two_h_before = (now - dt.timedelta(hours=2)).time()
-    offset = daily_reset_time
-    expeds = [e for e in expeds if
-              time_shifted_back_hours(e.get_time(), offset) > time_shifted_back_hours(two_h_before, offset)]
-    return expeds
-
-
-def render_expeditions(expeds, guild_reset_time=0, sort=True, filter=True):
-    msg = ""
-    if sort:
-        expeds = sort_expeditions(expeds, guild_reset_time)
-    if filter:
-        expeds = filter_expeditions(expeds, guild_reset_time)
-    for e in expeds:
-        msg += render_expedition(e)
-    if len(expeds) is 0:
-        msg += "No expeditions"
-    return msg
-
-
-def render_guild_admin(guild):
-    current_day = dt.datetime.now().date()
-    expeds = list(guild.expeditions.values())
-    guild_msg = "Guild Admin {}/{}\n\n".format(current_day.month, current_day.day)
-    guild_msg += render_expeditions(expeds, guild_reset_time=guild.daily_reset_time)
-    guild_msg += "\n"
-    guild_msg += render_adv_text()
-    return guild_msg
-
-
-def render_poll_markup(guild):
-    markup = types.InlineKeyboardMarkup()
-    expeds = list(guild.expeditions.values())
-    expeds = sort_expeditions(expeds, guild.daily_reset_time)
-    expeds = filter_expeditions(expeds, guild.daily_reset_time)
-    for e in expeds:
-        markup.add(types.InlineKeyboardButton("Join {} ({})".format(e.title, render_human_time(e.get_time())),
-                                              callback_data="/exped reg {}".format(e.title)))
-    # Render fort attendance poll
-    fort_mark_button = types.InlineKeyboardButton("Went fort today",
-                                                  callback_data="/fort mark")
-    fort_check_button = types.InlineKeyboardButton("My fort count",
-                                                   callback_data="/fort check")
-    markup.row(fort_mark_button, fort_check_button)
-    return markup
-
-
-def render_human_time(time_obj):
-    if time_obj.minute > 0:
-        return time_obj.strftime("%I.%M%p").lstrip("0").lower()
-    else:
-        return time_obj.strftime("%I%p").lstrip("0").lower()
 
 
 ################################
@@ -276,12 +188,34 @@ def exped_view(message):
                                              filter=False),
                           temporary=False)
 
+
 def exped_ready(message):
-    doc = """
-This handles a callback from an expedition reminder, when a user pressed the I'm ready button.
+    doc = """Possible messages:
+/exped ready team
+/exped ready team [label]
     """
-    print(message.text)
-    return m.MessageReply("You are ready!")
+    parts = message.text.split(' ')
+    if len(parts) == 4:
+        label = parts[3]
+    elif len(parts) == 3:
+        label = ""
+    else:
+        raise WrongCommandError(doc)
+
+    title = parts[2]
+    handle = message.from_user.first_name
+    handle_id = message.from_user.id
+    guild = guilds.get(message.chat.id)
+
+    e, result = guild.ready_expedition(title, handle_id, handle, label)
+    bot.edit_message_text(render_expedition_reminder(e),
+                          chat_id=guild.chat_id,
+                          message_id=message.message_id,
+                          parse_mode="Markdown",
+                          reply_markup=render_ready_markup(e))
+
+    ready_string = "ready" if result else "not ready"
+    return m.MessageReply("You are marked as {} for {}.".format(ready_string, e.title))
 
 
 @bot.edited_message_handler(commands=['exped'])
@@ -490,17 +424,17 @@ class GuildAutomation(object):
                     continue
                 for e in guild.expeditions.values():
                     if equal_hour_minute(e.get_time(), two_mins):
-                        # ready_markup = types.InlineKeyboardMarkup()
-                        # ready_markup.add(
-                        #     types.InlineKeyboardButton(
-                        #         "Im ready!",
-                        #         callback_data="/exped ready"
-                        #     )
-                        # )
+                        ready_markup = types.InlineKeyboardMarkup()
+                        ready_markup.add(
+                            types.InlineKeyboardButton(
+                                "Im ready!",
+                                callback_data="/exped ready {}".format(e.title)
+                            )
+                        )
                         bot.send_message(guild.chat_id,
-                                         "Expedition Reminder:\n{}".format(render_expedition(e)),
+                                         "Expedition Reminder:\n{}".format(render_expedition_reminder(e)),
                                          parse_mode="Markdown",
-                                         # reply_markup=ready_markup,
+                                         reply_markup=ready_markup,
                                          )
             time.sleep(60)
 
