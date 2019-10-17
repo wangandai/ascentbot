@@ -1,18 +1,16 @@
 import telebot
 from telebot import types
 import models as m
-import datetime as dt
 import threading
 import time
 from custom_errors import *
 import os
 import logging
-import pytz
+from util import *
 from flask import Flask, request
 from dotenv import load_dotenv
 load_dotenv()
 
-__tz__ = pytz.timezone("Asia/Singapore")
 __token__ = os.getenv("TG_TOKEN")
 telebot.logger.setLevel(logging.INFO)
 bot = telebot.AsyncTeleBot(__token__)
@@ -107,13 +105,6 @@ def render_human_time(time_obj):
         return time_obj.strftime("%I.%M%p").lstrip("0").lower()
     else:
         return time_obj.strftime("%I%p").lstrip("0").lower()
-
-
-def time_shifted_back_hours(t, hour_offset):
-    new_hour = t.hour - hour_offset
-    if new_hour < 0:
-        new_hour = 24 + new_hour
-    return t.replace(hour=new_hour)
 
 
 ################################
@@ -479,16 +470,6 @@ def reset(message):
     start(message)
 
 
-def get_singapore_time_now():
-    now = dt.datetime.utcnow()
-    offset = __tz__.utcoffset(now)
-    return now + offset
-
-
-def equal_hour_minute(time1, time2):
-    return time1.hour == time2.hour and time1.minute == time2.minute
-
-
 class GuildAutomation(object):
     def __init__(self):
         tasks = [
@@ -538,7 +519,6 @@ class GuildAutomation(object):
 
 
 GuildAutomation()
-
 
 if __name__ == "__main__":
 
