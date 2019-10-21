@@ -14,7 +14,7 @@ def obj_to_json(o):
         return None
 
 
-# Monkey patch json.dump and dumps behaviour
+# Patch json.dump and dumps behaviour
 class MODJson:
     @staticmethod
     def dump(obj, file, **kwargs):

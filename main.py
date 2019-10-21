@@ -1,14 +1,15 @@
 import telebot
-from telebot import types
-import models as m
 import threading
 import time
 import os
 import logging
-from custom_errors import *
-from renderers import *
-from util import *
 from flask import Flask, request
+
+import models as m
+from renderers import *
+from custom_errors import *
+import utils
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -417,13 +418,13 @@ class GuildAutomation(object):
 
     def exped_reminder(self):
         while True:
-            now = get_singapore_time_now()
+            now = utils.get_singapore_time_now()
             two_mins = now + dt.timedelta(minutes=2)
             for guild in guilds.values():
                 if getattr(guild, "stopped", False):
                     continue
                 for e in guild.expeditions.values():
-                    if equal_hour_minute(e.get_time(), two_mins):
+                    if utils.equal_hour_minute(e.get_time(), two_mins):
                         ready_markup = types.InlineKeyboardMarkup()
                         ready_markup.add(
                             types.InlineKeyboardButton(
@@ -432,7 +433,7 @@ class GuildAutomation(object):
                             )
                         )
                         bot.send_message(guild.chat_id,
-                                         "Expedition Reminder:\n{}".format(render_expedition_reminder(e)),
+                                         render_expedition_reminder(e),
                                          parse_mode="Markdown",
                                          reply_markup=ready_markup,
                                          )
@@ -440,7 +441,7 @@ class GuildAutomation(object):
 
     def daily_reset(self):
         while True:
-            now = get_singapore_time_now()
+            now = utils.get_singapore_time_now()
             for guild in guilds.values():
                 if getattr(guild, "stopped", False):
                     continue

@@ -36,8 +36,8 @@ class Expedition:
         self.ready = ready or []
         self.description = description
 
-    def set_time(self, time_string):
-        self.time = datetime.strptime(time_string, "%H%M").time()
+    def set_time(self, time):
+        self.time = time
 
     def set_description(self, description):
         self.description = description

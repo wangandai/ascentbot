@@ -1,20 +1,23 @@
-################################
-#       Renderers              #
-################################
+import utils
+from telebot import types
+import datetime as dt
+
+
 def render_adv_text():
     return """
 Advanced commands:
-Register with alt:
+Register alt:
 /exped reg <team> <alt>
-Create new expedition
+New expedition:
 /exped new <team> <HHMM> <description>
-Delete expedition
-/exped delete <team>
+Change time:
+/exped time <team> <HHMM>
 """
 
 
 def render_expedition_reminder(expedition):
-    msg = render_expedition(expedition)
+    msg = "Expedition Reminder\n"
+    msg += render_expedition(expedition)
     msg += "Ready (👥 {})\n".format(len(expedition.ready))
     for i, p in enumerate(expedition.ready):
         msg += "{}. [{}](tg://user?id={}) {}\n".format(i + 1, p.tg_handle, p.tg_id,
@@ -35,17 +38,17 @@ def render_expedition(expedition):
 
 
 def sort_expeditions(expeds, daily_reset_time=0):
-    return sorted(expeds, key=lambda x: time_shifted_back_hours(x.get_time(), daily_reset_time))
+    return sorted(expeds, key=lambda x: utils.time_shifted_back_hours(x.get_time(), daily_reset_time))
 
 
 def filter_expeditions(expeds, daily_reset_time=0):
-    now = get_singapore_time_now()
+    now = utils.get_singapore_time_now()
     if 0 <= now.time().hour - daily_reset_time <= 2:  # if current time is within 2 hours after daily reset time, dont filter
         return expeds
     two_h_before = (now - dt.timedelta(hours=2)).time()
     offset = daily_reset_time
     expeds = [e for e in expeds if
-              time_shifted_back_hours(e.get_time(), offset) > time_shifted_back_hours(two_h_before, offset)]
+              utils.time_shifted_back_hours(e.get_time(), offset) > utils.time_shifted_back_hours(two_h_before, offset)]
     return expeds
 
 
