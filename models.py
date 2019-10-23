@@ -165,6 +165,7 @@ class Guild:
         with self.lock:
             for e in self.expeditions:
                 self.expeditions[e].members = []
+                self.expeditions[e].ready = []
 
     def fort_mark(self, tg_id, handle, label=""):
         with self.lock:
