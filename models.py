@@ -30,13 +30,14 @@ class Player:
 
 class Expedition:
     def __init__(self, title: str = "", time: str = "1200", description: str = "", members: list = None, ready: list = None):
-        self.time = time
+        self.set_time(time)
         self.title = title
         self.members = members or []
         self.ready = ready or []
         self.description = description
 
     def set_time(self, time):
+        datetime.strptime(time, '%H%M')  # check that time corresponds to format
         self.time = time
 
     def set_description(self, description):

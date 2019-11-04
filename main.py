@@ -101,7 +101,7 @@ def cb_query_handler(call):
 #       Expedition Handlers    #
 ################################
 def exped_new(message):
-    doc = """
+    doc = """Example:
 /exped new team1 1500
 /exped new team1 1500 description
     """
@@ -124,7 +124,7 @@ def exped_new(message):
 
 
 def exped_time(message):
-    doc = """
+    doc = """Example:
 /exped time team HHMM
         """
     parts = message.text.split(' ')
@@ -139,8 +139,8 @@ def exped_time(message):
 
 
 def exped_delete(message):
-    doc = """
-/exped delete tea
+    doc = """Example:
+/exped delete team
     """
     parts = message.text.split(' ')
     if len(parts) == 3:
@@ -152,7 +152,7 @@ def exped_delete(message):
 
 
 def exped_reg(message):
-    doc = """
+    doc = """Example:
 /exped reg team
 /exped reg team [label]
         """
@@ -179,7 +179,7 @@ def exped_reg(message):
 
 
 def exped_view(message):
-    doc = """Possible messages:
+    doc = """Example:
 /exped view
     """
     guild = guilds.get(message.chat.id)
@@ -191,7 +191,7 @@ def exped_view(message):
 
 
 def exped_ready(message):
-    doc = """Possible messages:
+    doc = """Example:
 /exped ready team
 /exped ready team [label]
     """
@@ -240,7 +240,7 @@ Available commands are : {}
 #       Fort Handlers          #
 ################################
 def fort_mark(message):
-    doc = """Possible messages:
+    doc = """Example:
 /fort mark
 /fort mark <alt>
 """
@@ -266,7 +266,7 @@ def fort_mark(message):
 
 
 def fort_check(message):
-    doc = """Possible messages:
+    doc = """Example:
 /fort check
 /fort check <alt>
     """
@@ -291,7 +291,7 @@ def fort_check(message):
 
 
 def fort_reset_history(message):
-    doc = """Possible messages:
+    doc = """Example:
 /fort reset_history
     """
     guild = guilds.get(message.chat.id)
@@ -301,7 +301,7 @@ def fort_reset_history(message):
 
 
 def fort_get_history(message):
-    doc = """Possible messages:
+    doc = """Example:
 /fort get_history
     """
     guild = guilds.get(message.chat.id)
