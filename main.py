@@ -314,6 +314,29 @@ def fort_get_history(message):
     return m.MessageReply(msg, temporary=False)
 
 
+def fort_get_roster(message):
+    doc = """Example:
+/fort get_roster
+    """
+    guild = guilds.get(message.chat.id)
+    roster = guild.fort.get_roster()
+    msg = "*Latest Fort Roster* ({})\n\n".format(dt.datetime.now().strftime("%d/%m"))
+    for i in range(20):
+        if i > len(roster):
+            break
+        p = roster[i]
+        msg += "{}. {} : {}\n".format(i + 1,
+                                      p["telegram"] if p["telegram"] != "" else p["name"],
+                                      p["role"] if len(p["role"]) > 0 else "minibomb")
+    if len(roster) > 20:
+        msg += "\nBackup:\n"
+        for i, p in enumerate([p for p in roster[20:] if p["name"] is not ""]):
+            msg += "{}. {} : {}\n".format(i + 1,
+                                      p["telegram"] if p["telegram"] != "" else p["name"],
+                                      p["role"] if len(p["role"]) > 0 else "minibomb")
+    return m.MessageReply(msg, temporary=False)
+
+
 @bot.edited_message_handler(commands=['fort'])
 @bot.message_handler(commands=['fort'])
 def fort(message):
@@ -322,6 +345,7 @@ def fort(message):
         'check': fort_check,
         'reset_history': fort_reset_history,
         'get_history': fort_get_history,
+        'get_roster': fort_get_roster,
     }
     doc = """
 /fort command [arguments...]

@@ -4,6 +4,7 @@ from threading import Lock
 import database
 import os
 import json
+import ascentapi
 
 
 class Player:
@@ -63,6 +64,9 @@ class Fort:
     def from_json(cls, data):
         data["attendance"] = [Player.from_json(e) for e in data["attendance"]]
         return cls(**data)
+
+    def get_roster(self):
+        return ascentapi.get_fort_roster()
 
 
 class Guild:
