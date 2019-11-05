@@ -59,6 +59,7 @@ def handle_command(commands, message, doc):
                                  parse_mode="Markdown",
                                  disable_notification=True
                                  )).wait()
+        print(sent)
         if answer.temporary:
             delete_command_and_reply(message, sent)
 
@@ -334,12 +335,15 @@ def fort_get_roster(message):
             msg += "{}. {} : {}\n".format(i + 1,
                                       p["telegram"] if p["telegram"] != "" else p["name"],
                                       p["role"] if len(p["role"]) > 0 else "minibomb")
+    msg += "\nIf anyone can't make it please inform now. Thanks!"
+    # Todo: escape markdown characters in message
     return m.MessageReply(msg, temporary=False)
 
 
 @bot.edited_message_handler(commands=['fort'])
 @bot.message_handler(commands=['fort'])
 def fort(message):
+    print("here")
     fort_commands = {
         'mark': fort_mark,
         'check': fort_check,
