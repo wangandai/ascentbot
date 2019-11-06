@@ -84,11 +84,11 @@ def render_poll_markup(guild):
         markup.add(types.InlineKeyboardButton("Join {} ({})".format(e.title, render_human_time(e.get_time())),
                                               callback_data="/exped reg {}".format(e.title)))
     # Render fort attendance poll
-    fort_mark_button = types.InlineKeyboardButton("Went fort today",
-                                                  callback_data="/fort mark")
-    fort_check_button = types.InlineKeyboardButton("My fort count",
-                                                   callback_data="/fort check")
-    markup.row(fort_mark_button, fort_check_button)
+    # fort_mark_button = types.InlineKeyboardButton("Went fort today",
+    #                                               callback_data="/fort mark")
+    # fort_check_button = types.InlineKeyboardButton("My fort count",
+    #                                                callback_data="/fort check")
+    # markup.row(fort_mark_button, fort_check_button)
     return markup
 
 

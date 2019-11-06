@@ -48,3 +48,8 @@ class WrongCommandError(GuildError):
         self.message = "Invalid command."
         if len(doc) > 0:
             self.message += "\n{}".format(doc)
+
+
+class FeatureForbidden(GuildError):
+    def __init__(self, id):
+        self.message = "Feature forbidden in chat {}".format(id)

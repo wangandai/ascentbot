@@ -3,6 +3,7 @@ import threading
 import time
 import os
 import logging
+import json
 from flask import Flask, request
 
 import models as m
@@ -19,10 +20,21 @@ bot = telebot.AsyncTeleBot(__token__)
 
 guilds = m.Guilds.load()
 
+with open('feature_whitelist.json') as f:
+    __feature_whitelist__ = json.load(f)
+
 
 ################################
 #       Middleware             #
 ################################
+# TODO: This is hack to keep fort feature only for ascent
+def ensure_feature_whitelisted(command, message):
+    command = command.replace("/", "", 1)
+    whitelist = __feature_whitelist__.get(command, None)
+    if whitelist is not None and message.chat.id not in whitelist:
+        raise FeatureForbidden(message.chat.id)
+
+
 def _update_pinned_msg(guild):
     if guild.pinned_message_id is not None:
         bot.edit_message_text(render_guild_admin(guild),
@@ -34,8 +46,9 @@ def _update_pinned_msg(guild):
 
 def process_command(commands, message, doc):
     try:
-        guild = guilds.get(message.chat.id)
         parts = message.text.split(' ')
+        ensure_feature_whitelisted(parts[0], message)
+        guild = guilds.get(message.chat.id)
         if len(parts) >= 2 and parts[1] in commands:
             command_str = parts[1]
             answer = commands[command_str](message)
