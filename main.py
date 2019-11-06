@@ -57,9 +57,9 @@ def handle_command(commands, message, doc):
     if answer is not None and len(answer.message) > 0:
         sent = (bot.send_message(message.chat.id, answer.message,
                                  parse_mode="Markdown",
-                                 disable_notification=True
+                                 disable_notification=True,
+                                 reply_markup=answer.reply_markup,
                                  )).wait()
-        print(sent)
         if answer.temporary:
             delete_command_and_reply(message, sent)
 
@@ -94,6 +94,7 @@ def cb_query_handler(call):
         'mark': fort_mark,
         'check': fort_check,
         'ready': exped_ready,
+        'reassign': fort_reassign,
     }
     handle_callback(cb_handlers, call)
 
@@ -321,35 +322,43 @@ def fort_get_roster(message):
     """
     guild = guilds.get(message.chat.id)
     roster = guild.fort.get_roster()
-    msg = "*Latest Fort Roster* ({})\n\n".format(dt.datetime.now().strftime("%d/%m"))
-    for i in range(20):
-        if i > len(roster):
-            break
-        p = roster[i]
-        msg += "{}. {} : {}\n".format(i + 1,
-                                      p["telegram"] if p["telegram"] != "" else p["name"],
-                                      p["role"] if len(p["role"]) > 0 else "minibomb")
-    if len(roster) > 20:
-        msg += "\nBackup:\n"
-        for i, p in enumerate([p for p in roster[20:] if p["name"] is not ""]):
-            msg += "{}. {} : {}\n".format(i + 1,
-                                      p["telegram"] if p["telegram"] != "" else p["name"],
-                                      p["role"] if len(p["role"]) > 0 else "minibomb")
-    msg += "\nIf anyone can't make it please inform now. Thanks!"
+    msg = render_fort_roster(roster)
+
     # Todo: escape markdown characters in message
-    return m.MessageReply(msg, temporary=False)
+    return m.MessageReply(msg, temporary=False, reply_markup=render_fort_roster_markup())
+
+
+def fort_reassign(message):
+    doc = """Example:
+/fort reassign
+/fort reassign <out>
+/fort reassign <out> <in>
+
+    """
+    player_in = None
+    player_out = None
+    parts = message.text.split(' ')
+    if len(parts) == 2:
+        player_out = message.from_user.username or message.from_user.first_name
+    if len(parts) >= 3:
+        player_out = parts[2]
+    if len(parts) == 4:
+        player_in = parts[3]
+    if len(parts) > 5:
+        raise WrongCommandError(doc)
+    return m.MessageReply("{} {}".format(player_in, player_out), temporary=False)
 
 
 @bot.edited_message_handler(commands=['fort'])
 @bot.message_handler(commands=['fort'])
 def fort(message):
-    print("here")
     fort_commands = {
         'mark': fort_mark,
         'check': fort_check,
         'reset_history': fort_reset_history,
         'get_history': fort_get_history,
         'get_roster': fort_get_roster,
+        'reassign': fort_reassign,
     }
     doc = """
 /fort command [arguments...]

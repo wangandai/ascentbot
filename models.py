@@ -275,16 +275,7 @@ class Guilds:
 
 
 class MessageReply:
-    def __init__(self, message, temporary=True):
+    def __init__(self, message, temporary=True, reply_markup=None):
         self.message = message
         self.temporary = temporary  # Marks reply as temporary and should be deleted to reduce clutter
-
-
-class Command:
-    def __init__(self, message):
-        if message[0] is "/":
-            parts = message.split(" ")
-            self.cmd = parts[0]
-            self.sub_cmd = parts[1]
-            if len(parts) > 2:
-                self.args = parts[2:]
+        self.reply_markup = reply_markup

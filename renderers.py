@@ -108,3 +108,41 @@ def render_human_time(time_obj):
         return time_obj.strftime("%I.%M%p").lstrip("0").lower()
     else:
         return time_obj.strftime("%I%p").lstrip("0").lower()
+
+
+def render_fort_roster(roster):
+    def get_name(p):
+        return escape_for_markdown(p["telegram"] if p["telegram"] != "" else p["name"])
+
+    def get_role(p):
+        return escape_for_markdown(p["role"] if len(p["role"]) > 0 else "minibomb")
+
+    msg = "*Latest Fort Roster* ({})\n\n".format(dt.datetime.now().strftime("%d/%m"))
+    for i in range(20):
+        if i > len(roster):
+            break
+        p = roster[i]
+        msg += "{}. {} : {}\n".format(i + 1, get_name(p), get_role(p))
+    if len(roster) > 20:
+        msg += "\nBackup:\n"
+        for i, p in enumerate([p for p in roster[20:] if p["name"] is not ""]):
+            msg += "{}. {} : {}\n".format(i + 1, get_name(p), get_role(p))
+    msg += "\nIf anyone can't make it please inform now. Thanks!"
+    return msg
+
+
+def escape_for_markdown(s):
+    for symbol in ["*", "_"]:
+        s = s.replace(symbol, "\\" + symbol)
+    return s
+
+
+def render_fort_roster_markup():
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton(
+            "I can't today.",
+            callback_data="/fort reassign"
+        )
+    )
+    return markup
