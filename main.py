@@ -338,7 +338,10 @@ def fort_get_roster(message):
     msg = render_fort_roster(roster)
 
     # Todo: escape markdown characters in message
-    return m.MessageReply(msg, temporary=False, reply_markup=render_fort_roster_markup())
+    return m.MessageReply(msg,
+                          temporary=False,
+                          # reply_markup=render_fort_roster_markup()
+                          )
 
 
 def fort_reassign(message):
@@ -371,7 +374,7 @@ def fort(message):
         'reset_history': fort_reset_history,
         'get_history': fort_get_history,
         'get_roster': fort_get_roster,
-        'reassign': fort_reassign,
+        # 'reassign': fort_reassign,
     }
     doc = """
 /fort command [arguments...]
@@ -460,6 +463,7 @@ class GuildAutomation(object):
         tasks = [
             self.daily_reset,
             self.exped_reminder,
+            self.fort_reminder,
         ]
         for task in tasks:
             thread = threading.Thread(target=task, args=())
@@ -501,6 +505,16 @@ class GuildAutomation(object):
                     _guild_pin(guild.chat_id)
             guilds.save()
             time.sleep(60 * 60)
+
+    def fort_reminder(self):
+        while True:
+            now = utils.get_singapore_time_now()
+            if now.hour == 20 and now.minute == 55:
+                bot.send_message(-1001235725395,  # hard coded ascent chat id
+                                 "Fort Reminder:\n\n" + render_fort_roster(),
+                                 parse_mode="Markdown",
+                                 )
+            time.sleep(60)
 
 
 GuildAutomation()
