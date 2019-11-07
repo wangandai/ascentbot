@@ -117,7 +117,7 @@ def render_fort_roster(roster):
     def get_role(p):
         return escape_for_markdown(p["role"] if len(p["role"]) > 0 else "minibomb")
 
-    msg = "*Latest Fort Roster* ({})\n\n".format(dt.datetime.now().strftime("%d/%m"))
+    msg = "*Latest Fort Roster* ({})\n\n".format(utils.get_singapore_time_now().strftime("%d/%m"))
     for i in range(20):
         if i > len(roster):
             break
