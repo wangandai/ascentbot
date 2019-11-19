@@ -398,6 +398,8 @@ def _guild_pin(chat_id):
     if type(sent) is tuple:
         if "blocked" in sent[1].result.text:
             _guild_stop(chat_id)
+        else:
+            logging.error(sent[1].result.text)
     else:
         guild.pinned_message_id = sent.message_id
         bot.pin_chat_message(guild.chat_id, guild.pinned_message_id)

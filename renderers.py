@@ -3,6 +3,12 @@ from telebot import types
 import datetime as dt
 
 
+def escape_for_markdown(s):
+    for symbol in ["*", "_", "[", "]", "(", ")", ]:
+        s = s.replace(symbol, "\\" + symbol)
+    return s
+
+
 def render_adv_text():
     return """
 Advanced commands:
@@ -15,13 +21,19 @@ Change time:
 """
 
 
+def render_expedition_member_line(i, p):
+    return "{}. [{}](tg://user?id={}) {}\n".format(i,
+                                                   escape_for_markdown(p.tg_handle),
+                                                   p.tg_id,
+                                                   escape_for_markdown(p.label if p.label is not None else ""))
+
+
 def render_expedition_reminder(expedition):
     msg = "Expedition Reminder\n"
     msg += render_expedition(expedition)
     msg += "Ready (👥 {})\n".format(len(expedition.ready))
     for i, p in enumerate(expedition.ready):
-        msg += "{}. [{}](tg://user?id={}) {}\n".format(i + 1, p.tg_handle, p.tg_id,
-                                                       p.label if p.label is not None else "")
+        msg += render_expedition_member_line(i + 1, p)
     return msg + "\n"
 
 
@@ -32,8 +44,7 @@ def render_expedition(expedition):
     if len(expedition.description) > 0:
         msg += "📋 {}\n".format(expedition.description)
     for i, member in enumerate(expedition.members):
-        msg += "{}. [{}](tg://user?id={}) {}\n".format(i + 1, member.tg_handle, member.tg_id,
-                                                       member.label if member.label is not None else "")
+        msg += render_expedition_member_line(i + 1, member)
     return msg + "\n"
 
 
@@ -129,12 +140,6 @@ def render_fort_roster(roster):
             msg += "{}. {} : {}\n".format(i + 1, get_name(p), get_role(p))
     msg += "\nIf anyone can't make it please inform now. Thanks!"
     return msg
-
-
-def escape_for_markdown(s):
-    for symbol in ["*", "_"]:
-        s = s.replace(symbol, "\\" + symbol)
-    return s
 
 
 def render_fort_roster_markup():
