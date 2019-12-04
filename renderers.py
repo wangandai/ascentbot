@@ -38,9 +38,10 @@ def render_expedition_reminder(expedition):
 
 
 def render_expedition(expedition):
-    msg = "⚔️ {}    🕑 {}    👥 {}\n".format(expedition.title,
+    msg = "⚔️ {}    🕑 {}    👥 {}\n".format(escape_for_markdown(expedition.title),
                                              render_human_time(expedition.get_time()),
-                                             len(expedition.members))
+                                             len(expedition.members),
+                                             )
     if len(expedition.description) > 0:
         msg += "📋 {}\n".format(expedition.description)
     for i, member in enumerate(expedition.members):
