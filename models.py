@@ -50,9 +50,9 @@ class Expedition:
 
     @classmethod
     def from_json(cls, data):
-        data["members"] = [Player.from_json(m) for m in data["members"]]
-        data["ready"] = [Player.from_json(m) for m in data["ready"]]
-        data["daily"] = [Player.from_json(m) for m in data["daily"]]
+        data["members"] = [Player.from_json(m) for m in data.get("members", list())]
+        data["ready"] = [Player.from_json(m) for m in data.get("ready", list())]
+        data["daily"] = [Player.from_json(m) for m in data.get("daily", list())]
         return cls(**data)
 
 
@@ -64,7 +64,7 @@ class Fort:
 
     @classmethod
     def from_json(cls, data):
-        data["attendance"] = [Player.from_json(e) for e in data["attendance"]]
+        data["attendance"] = [Player.from_json(e) for e in data.get("attendance", list())]
         return cls(**data)
 
     def get_roster(self):
@@ -94,7 +94,7 @@ class Guild:
     def from_json(cls, data):
         data.pop("lock", None)
         data["fort"] = Fort.from_json(data["fort"])
-        data["expeditions"] = {t: Expedition.from_json(e) for (t, e) in data["expeditions"].items()}
+        data["expeditions"] = {t: Expedition.from_json(e) for (t, e) in data.get("expeditions", dict()).items()}
         # TODO: Members
         return cls(**data)
 
