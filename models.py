@@ -30,12 +30,13 @@ class Player:
 
 
 class Expedition:
-    def __init__(self, title: str = "", time: str = "1200", description: str = "", members: list = None, ready: list = None):
+    def __init__(self, title: str = "", time: str = "1200", description: str = "", members: list = None, ready: list = None, daily: list = None):
         self.set_time(time)
         self.title = title
         self.members = members or []
         self.ready = ready or []
         self.description = description
+        self.daily = daily or []
 
     def set_time(self, time):
         datetime.strptime(time, '%H%M')  # check that time corresponds to format
@@ -51,6 +52,7 @@ class Expedition:
     def from_json(cls, data):
         data["members"] = [Player.from_json(m) for m in data["members"]]
         data["ready"] = [Player.from_json(m) for m in data["ready"]]
+        data["daily"] = [Player.from_json(m) for m in data["daily"]]
         return cls(**data)
 
 
@@ -129,6 +131,19 @@ class Guild:
             except KeyError:
                 raise ExpeditionNotFoundError
 
+    def daily_expedition(self, title, tg_id, handle, label=""):
+        with self.lock:
+            e = self.get_expedition(title)
+            p = Player(tg_id, handle, label)
+            if p in e.daily:
+                e.daily.remove(p)
+                return e, False
+            else: 
+                if len(e.daily) >= 10:
+                    raise ExpeditionFullError
+                e.daily.append(p)
+                return e, True
+
     def checkin_expedition(self, title, tg_id, handle, label=""):
         with self.lock:
             e = self.get_expedition(title)
@@ -169,7 +184,7 @@ class Guild:
     def reset_expeditions(self):
         with self.lock:
             for e in self.expeditions:
-                self.expeditions[e].members = []
+                self.expeditions[e].members = list(self.expeditions[e].daily)
                 self.expeditions[e].ready = []
 
     def fort_mark(self, tg_id, handle, label=""):
