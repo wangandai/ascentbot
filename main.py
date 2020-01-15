@@ -192,16 +192,49 @@ def exped_reg(message):
         answer_text = "{} checked out of {}".format(member.tg_handle, e.title)
     return m.MessageReply(answer_text)
 
+def exped_daily(message):
+    doc = """Example:
+/exped daily team
+/exped daily team [label]
+        """
+    parts = message.text.split(' ')
+    if len(parts) == 4:
+        label = parts[3]
+    elif len(parts) == 3:
+        label = ""
+    else:
+        raise WrongCommandError(doc)
+
+    title = parts[2]
+    handle = message.from_user.first_name
+    handle_id = message.from_user.id
+    guild = guilds.get(message.chat.id)
+
+    e, success = guild.daily_expedition(title, handle_id, handle, label)
+    word = "in to" if success else "out of"
+    return m.MessageReply("{} checked {} daily {}".format(handle, word, e.title))
+    
 
 def exped_view(message):
     doc = """Example:
 /exped view
+/exped view [team]
     """
+    parts = message.text.split(' ')
+    if len(parts) == 3:
+        team = parts[2]
+    else:
+        team = None
     guild = guilds.get(message.chat.id)
-    expeds = list(guild.expeditions.values())
-    return m.MessageReply(render_expeditions(expeds,
+    if team:
+        exped = guild.get_expedition(team)
+        return m.MessageReply(render_expedition_detail(exped), temporary=False)
+    else:
+        expeds = list(guild.expeditions.values())
+        return m.MessageReply(render_expeditions(expeds,
                                              guild_reset_time=guild.daily_reset_time,
-                                             filter=False),
+                                             filter=False
+                                             ),
                           temporary=False)
 
 
@@ -242,7 +275,8 @@ def exped(message):
         'new': exped_new,
         'delete': exped_delete,
         'time': exped_time,
-        'view': exped_view
+        'view': exped_view,
+        'daily': exped_daily
     }
     doc = """
 /exped command [arguments...]
@@ -480,7 +514,7 @@ class GuildAutomation(object):
                 if getattr(guild, "stopped", False):
                     continue
                 for e in guild.expeditions.values():
-                    if utils.equal_hour_minute(e.get_time(), two_mins):
+                    if utils.equal_hour_minute(e.get_time(), two_mins): 
                         ready_markup = types.InlineKeyboardMarkup()
                         ready_markup.add(
                             types.InlineKeyboardButton(
