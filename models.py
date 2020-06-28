@@ -121,16 +121,23 @@ class Guild:
 
     def set_expedition_title(self, oldtitle, newtitle):
         with self.lock:
-            e = self.get_expedition(oldtitle)
-            e.set_title(newtitle)
+            try:
+                self.get_expedition(newtitle)
+            except ExpeditionNotFoundError:
+                e = self.get_expedition(oldtitle)
+                e.set_title(newtitle)
 
-            oldslug = oldtitle.lower()
-            del self.expeditions[oldslug]
+                oldslug = oldtitle.lower()
+                del self.expeditions[oldslug]
 
-            newslug = newtitle.lower()
-            self.expeditions[newslug] = e
+                newslug = newtitle.lower()
+                self.expeditions[newslug] = e
 
-            return e
+                return e
+            else:
+                raise ExpeditionExistsError
+
+
 
     def set_expedition_description(self, title, description=""):
         with self.lock:
