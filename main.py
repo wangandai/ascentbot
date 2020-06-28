@@ -564,7 +564,7 @@ class GuildAutomation(object):
                 if getattr(guild, "stopped", False):
                     continue
                 for e in guild.expeditions.values():
-                    if utils.equal_hour_minute(e.get_time(), two_mins): 
+                    if utils.equal_hour_minute(e.get_time(), two_mins) and len(e.members) != 0:
                         ready_markup = types.InlineKeyboardMarkup()
                         ready_markup.add(
                             types.InlineKeyboardButton(
