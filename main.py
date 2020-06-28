@@ -23,10 +23,29 @@ guilds = m.Guilds.load()
 with open('feature_whitelist.json') as f:
     __feature_whitelist__ = json.load(f)
 
+with open('sauron.json') as f:
+    __sauron__ = json.load(f)
+print(__sauron__)
+
 
 ################################
 #       Middleware             #
 ################################
+def needs_to_be_sauroned(message):
+    try:
+        return message.chat.id in __sauron__["target"] and message.text is not None and message.text[0] is not "/"
+    except Exception as e:
+        logging.exception(e)
+        return False
+
+
+@bot.message_handler(func=needs_to_be_sauroned)
+def handle_sauron(message):
+    nazgul = "[({}){}]:{}".format(message.chat.title, message.from_user.username, message.text)
+    print(nazgul)
+    bot.send_message(__sauron__["out"], nazgul)
+
+
 # TODO: This is hack to keep fort feature only for ascent
 def ensure_feature_whitelisted(command, message):
     command = command.replace("/", "", 1)
@@ -191,6 +210,7 @@ def exped_reg(message):
         e, member = guild.checkout_expedition(title, handle_id, handle, label)
         answer_text = "{} checked out of {}".format(member.tg_handle, e.title)
     return m.MessageReply(answer_text)
+
 
 def exped_daily(message):
     doc = """Example:
@@ -544,10 +564,13 @@ class GuildAutomation(object):
 
     def fort_reminder(self):
         while True:
+            ascent_chat_id = -1001235725395
+            guild = guilds.get(ascent_chat_id)
+            roster = guild.fort.get_roster()
             now = utils.get_singapore_time_now()
             if now.hour == 20 and now.minute == 55:
-                bot.send_message(-1001235725395,  # hard coded ascent chat id
-                                 "Fort Reminder:\n\n" + render_fort_roster(),
+                bot.send_message(ascent_chat_id,  # hard coded ascent chat id
+                                 "Fort Reminder:\n\n" + render_fort_roster(roster),
                                  parse_mode="Markdown",
                                  )
             time.sleep(60)

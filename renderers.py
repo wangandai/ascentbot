@@ -84,7 +84,7 @@ def render_expeditions(expeds, guild_reset_time=0, sort=True, filter=True):
 
 
 def render_guild_admin(guild):
-    current_day = dt.datetime.now().date()
+    current_day = utils.get_singapore_time_now().date()
     expeds = list(guild.expeditions.values())
     guild_msg = "Guild Admin {}/{}\n\n".format(current_day.month, current_day.day)
     guild_msg += render_expeditions(expeds, guild_reset_time=guild.daily_reset_time)
