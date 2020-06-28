@@ -4,7 +4,7 @@ import datetime as dt
 
 
 def escape_for_markdown(s):
-    for symbol in ["*", "_", "[", "]", "(", ")", ]:
+    for symbol in ["*", "_", "["]:
         s = s.replace(symbol, "\\" + symbol)
     return s
 
@@ -43,10 +43,11 @@ def render_expedition(expedition):
                                              len(expedition.members),
                                              )
     if len(expedition.description) > 0:
-        msg += "📋 {}\n".format(expedition.description)
+        msg += "📋 {}\n".format(escape_for_markdown(expedition.description))
     for i, member in enumerate(expedition.members):
         msg += render_expedition_member_line(i + 1, member)
     return msg + "\n"
+
 
 def render_expedition_detail(expedition):
     msg = render_expedition(expedition)
@@ -54,6 +55,7 @@ def render_expedition_detail(expedition):
     for i, member in enumerate(expedition.daily):
         msg += render_expedition_member_line(i + 1, member)
     return msg
+
 
 def sort_expeditions(expeds, daily_reset_time=0):
     return sorted(expeds, key=lambda x: utils.time_shifted_back_hours(x.get_time(), daily_reset_time))

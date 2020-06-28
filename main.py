@@ -152,9 +152,37 @@ def exped_new(message):
     try:
         guild = guilds.get(message.chat.id)
         e = guild.new_expedition(title, time, description)
-        return m.MessageReply("Expedition created: {} {}".format(e.title, time))
+        return m.MessageReply("Expedition created: {} {}".format(escape_for_markdown(e.title), time))
     except ValueError:
         raise WrongCommandError(doc)
+
+
+def exped_title(message):
+    doc = """Example:
+/exped title oldtitle newtitle
+        """
+    parts = message.text.split(' ')
+    if len(parts) != 4:
+        raise WrongCommandError(doc)
+
+    guild = guilds.get(message.chat.id)
+    guild.set_expedition_title(parts[2], parts[3])
+    return m.MessageReply("{} updated to {}".format(escape_for_markdown(parts[2]), escape_for_markdown(parts[3])))
+
+
+def exped_description(message):
+    doc = """Example:
+/exped desc name description
+    """
+    parts = message.text.split(' ', 3)
+    if len(parts) < 3:
+        raise WrongCommandError(doc)
+    if len(parts) == 3:
+        parts = parts + [""]
+
+    guild = guilds.get(message.chat.id)
+    e = guild.set_expedition_description(parts[2], parts[3])
+    return m.MessageReply("{} description updated".format(escape_for_markdown(e.title)))
 
 
 def exped_time(message):
@@ -167,7 +195,7 @@ def exped_time(message):
     try:
         guild = guilds.get(message.chat.id)
         e = guild.set_expedition_time(parts[2], parts[3])
-        return m.MessageReply("{} updated to {}".format(e.title, parts[3]))
+        return m.MessageReply("{} updated to {}".format(escape_for_markdown(e.title), parts[3]))
     except ValueError:
         raise WrongCommandError(doc)
 
@@ -295,6 +323,8 @@ def exped(message):
         'new': exped_new,
         'delete': exped_delete,
         'time': exped_time,
+        'title': exped_title,
+        'desc': exped_description,
         'view': exped_view,
         'daily': exped_daily
     }

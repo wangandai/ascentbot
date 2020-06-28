@@ -42,6 +42,9 @@ class Expedition:
         datetime.strptime(time, '%H%M')  # check that time corresponds to format
         self.time = time
 
+    def set_title(self, title):
+        self.title = title
+
     def set_description(self, description):
         self.description = description
 
@@ -114,6 +117,25 @@ class Guild:
         with self.lock:
             e = self.get_expedition(title)
             e.set_time(time)
+            return e
+
+    def set_expedition_title(self, oldtitle, newtitle):
+        with self.lock:
+            e = self.get_expedition(oldtitle)
+            e.set_title(newtitle)
+
+            oldslug = oldtitle.lower()
+            del self.expeditions[oldslug]
+
+            newslug = newtitle.lower()
+            self.expeditions[newslug] = e
+
+            return e
+
+    def set_expedition_description(self, title, description=""):
+        with self.lock:
+            e = self.get_expedition(title)
+            e.set_description(description)
             return e
 
     def get_expedition(self, title):
